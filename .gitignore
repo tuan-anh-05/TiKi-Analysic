@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+
+# Logs
+03_push_to_sql/logs/*
+!03_push_to_sql/logs/.gitkeep
+
+# Optional: ignore large generated data if you do not want to store CSV in Git
+# 01_craw_data/data/raw/*.csv
+# 01_craw_data/data/raw/reviews/*.csv
+# 02_process_raw_data/data/processed/*.csv

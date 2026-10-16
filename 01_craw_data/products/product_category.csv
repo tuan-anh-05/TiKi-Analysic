@@ -1,0 +1,9 @@
+﻿product_id,category_id,category_name,category_level,category_url,is_leaf,is_primary
+278496130,8322,Nhà Sách Tiki,1,/nha-sach-tiki/c8322,,False
+278496130,316,Sách tiếng Việt,2,/sach-truyen-tieng-viet/c316,False,True
+278496130,1084,"Truyện Tranh, Manga, Comic",3,/truyen-tranh/c1084,,False
+278777861,8322,Nhà Sách Tiki,1,/nha-sach-tiki/c8322,,False
+278777861,316,Sách tiếng Việt,2,/sach-truyen-tieng-viet/c316,,False
+278777861,393,Sách thiếu nhi ,3,/sach-truyen-thieu-nhi/c393,,False
+278777861,853,Kiến thức - Bách khoa,4,/kien-thuc-ky-nang/c853,,False
+278777861,2,Root,5,,False,True
