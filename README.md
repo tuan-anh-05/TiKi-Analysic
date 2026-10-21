@@ -28,18 +28,16 @@ Workflow dùng giờ `Asia/Bangkok` (UTC+7). GitHub cron được khai báo theo
 |---|---|
 | 18:00 (11:00 UTC) mỗi ngày | Crawl daily price lần 1 |
 | 21:00 (14:00 UTC) mỗi ngày | Crawl daily price lần 2 |
-| 02:00 (19:00 UTC ngày trước) ngày cuối tháng | Crawl product lần 1 |
-| 10:00 (03:00 UTC) ngày cuối tháng | Crawl product lần 2 |
-| 02:00 (19:00 UTC ngày trước) ngày mùng 1 | Crawl review lần 1 |
-| 10:00 (03:00 UTC) ngày mùng 1 | Crawl review lần 2 |
+| 02:00 (19:00 UTC ngày trước) mỗi ngày | Crawl/tiếp tục crawl product theo checkpoint |
+| 10:00 (03:00 UTC) ngày mùng 1 | Crawl review |
 | 22:00 (15:00 UTC) mỗi ngày | Chạy `02_process_raw_data/run_all_preprocessing.py` |
 | 23:00 (16:00 UTC) mỗi ngày | Chạy `03_push_to_sql/push_to_sql/push_to_database.py` |
 
-“21:00 sáng” được hiểu là 21:00 (9 giờ tối). Lịch cron không hỗ trợ trực tiếp “ngày cuối tháng”, nên workflow được kích hoạt hằng ngày ở các giờ 02:00 và 10:00 rồi chỉ chạy product nếu ngày địa phương là ngày cuối tháng; review chỉ chạy khi là mùng 1.
+“21:00 sáng” được hiểu là 21:00 (9 giờ tối). Product chạy mỗi ngày lúc 02:00 để checkpoint tiếp tục snapshot tháng hiện tại; nếu chưa crawl hết trong giới hạn thời gian của một lượt, lượt ngày sau sẽ tiếp tục. Review chỉ chạy một lần vào 10:00 ngày mùng 1.
 
 Có thể chạy thủ công trong tab **Actions → Tiki scheduled data pipeline → Run workflow**, chọn tác vụ cần chạy.
 
-Product có giới hạn tối đa 350 phút mỗi lượt GitHub Actions và lưu checkpoint để tiếp tục ở lượt kế tiếp. Vì chỉ chạy hai lượt vào cuối tháng, snapshot có thể chưa crawl hết sản phẩm nếu số lượng nhiều hoặc API Tiki chậm/giới hạn request.
+Product có giới hạn tối đa 350 phút mỗi lượt GitHub Actions và lưu checkpoint để tiếp tục ở lượt chạy hằng ngày kế tiếp cho đến khi hoàn tất snapshot.
 
 ## Kết nối Supabase
 

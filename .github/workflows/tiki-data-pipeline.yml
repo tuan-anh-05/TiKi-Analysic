@@ -54,16 +54,12 @@ jobs:
           hour="manual"; day="manual"
           if [[ "${{ github.event_name }}" == "schedule" ]]; then
             day="$(TZ=Asia/Bangkok date +%d)"
-            month="$(TZ=Asia/Bangkok date +%m)"
-            tomorrow_month="$(TZ=Asia/Bangkok date -d tomorrow +%m)"
 
             daily_price=false; product=false; review=false; preprocess=false; push=false
             case "${{ github.event.schedule }}" in
               "0 11 * * *"|"0 14 * * *") daily_price=true ;;
-              "0 19 * * *"|"0 3 * * *")
-                [[ "$tomorrow_month" != "$month" ]] && product=true || true
-                [[ "$day" == "01" ]] && review=true || true
-                ;;
+              "0 19 * * *") product=true ;;
+              "0 3 * * *") [[ "$day" == "01" ]] && review=true || true ;;
               "0 15 * * *") preprocess=true ;;
               "0 16 * * *") push=true ;;
             esac
