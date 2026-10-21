@@ -21,6 +21,7 @@ import sys
 import time
 import pandas as pd
 from sqlalchemy import create_engine
+from sqlalchemy.engine import make_url
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 
@@ -133,9 +134,15 @@ def push_incremental_postgres(project_dir: Path, db_url: str, log_file: Path):
     cp = load_checkpoint(checkpoint_file)
 
     log_msg(log_file, "Kết nối đến cơ sở dữ liệu Supabase PostgreSQL...")
-    conn = psycopg2.connect(db_url)
+    # requirements.txt installs psycopg2-binary. Supabase can provide URLs with
+    # a SQLAlchemy driver suffix (for example postgresql+psycopg://); normalize
+    # both clients to the installed psycopg2 driver instead of requiring psycopg v3.
+    parsed_url = make_url(db_url)
+    psycopg2_url = parsed_url.set(drivername="postgresql")
+    sqlalchemy_url = parsed_url.set(drivername="postgresql+psycopg2")
+    conn = psycopg2.connect(psycopg2_url.render_as_string(hide_password=False))
     cursor = conn.cursor()
-    engine = create_engine(db_url, pool_pre_ping=True)
+    engine = create_engine(sqlalchemy_url, pool_pre_ping=True)
 
     # Tạo bảng nếu chưa có (PostgreSQL dùng execute thay cho executescript)
     ddl_file = project_dir / "03_push_to_sql" / "create_database" / "create_tables_postgres.sql"
