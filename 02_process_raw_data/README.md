@@ -1,10 +1,26 @@
-# 02 - Process raw data
+# 02 — Process raw data
 
-- `code/clean_reviews.py`: làm sạch review thô, chuẩn hóa ô trống và loại bản ghi trùng.
-- `data/reviews_clean.csv`: kết quả làm sạch.
+Chuẩn hóa CSV từ `01_craw_data/` cho mục tiêu phân tích và nạp PostgreSQL.
 
-Chạy từ thư mục gốc project:
+## Các nhóm dữ liệu
+
+- `category/process_category.py`: chuẩn hóa danh mục tĩnh.
+- `daily_price/process_daily_price.py`: chỉ xử lý các dòng có `crawl_date` là ngày hiện tại theo `Asia/Bangkok`; nối khóa mới vào lịch sử sạch.
+- `product/process_product.py`: lọc listing/detail/seller/product-category theo tháng hiện tại, chuẩn hóa ID và ghi snapshot tháng ra các CSV sạch.
+- `review/process_review.py`: xử lý theo chunk; chuẩn hóa dữ liệu và chỉ nối các review mới theo khóa ba cột `(review_id, product_id, seller_product_id)`.
+- `run_all_preprocessing.py`: chạy các module tiền xử lý theo thứ tự.
+- `pareto/pareto_category.ipynb`: notebook phân tích Pareto.
+
+## Lưu ý về ghi file
+
+Daily price và review được tích lũy, không ghi đè lịch sử. Các CSV product sạch là snapshot của tháng hiện tại và được tạo lại từ dữ liệu raw có `crawl_date` thuộc tháng đó. Bản raw vẫn được giữ để có thể xử lý lại.
+
+## Chạy
+
+Từ thư mục gốc:
 
 ```bash
-python 02_process_raw_data/code/clean_reviews.py
+python 02_process_raw_data/run_all_preprocessing.py
 ```
+
+Hoặc chạy từng file `process_*.py` trong thư mục dữ liệu tương ứng. Workflow tự động gọi master script hằng ngày lúc 22:00 giờ `Asia/Bangkok`.

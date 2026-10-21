@@ -1,0 +1,27 @@
+{
+  "last_sync_time": null,
+  "category": {
+    "synced": false,
+    "synced_at": null,
+    "total_categories": 0,
+    "total_sub_categories": 0
+  },
+  "daily_price": {
+    "synced_dates": []
+  },
+  "monthly_snapshot": {
+    "dim_product_listing": [],
+    "product_detail": [],
+    "product_seller": [],
+    "product_category_map": []
+  },
+  "review": {
+    "composite_keys_count": 0,
+    "key_structure": [
+      "review_id",
+      "product_id",
+      "seller_product_id"
+    ],
+    "last_sync_time": null
+  }
+}

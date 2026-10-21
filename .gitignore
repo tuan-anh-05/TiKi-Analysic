@@ -5,6 +5,13 @@ __pycache__/
 venv/
 .env
 
+# Duplicate local export; the canonical raw review file is product_review.csv.
+01_craw_data/review/product_review copy.csv
+
+# Legacy local SQLite database/checkpoint; Supabase is the active database.
+03_push_to_sql/tiki_analytics.db
+03_push_to_sql/sync_checkpoint.json
+
 # Logs
 03_push_to_sql/logs/*
 !03_push_to_sql/logs/.gitkeep
