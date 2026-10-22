@@ -21,6 +21,7 @@ TASK_COMMANDS = {
     "product": ["01_craw_data/product/product.py"],
     "review": ["01_craw_data/review/review.py"],
     "preprocess": ["02_process_raw_data/run_all_preprocessing.py"],
+    "validate_silver": ["02_process_raw_data/validate_silver.py"],
     "push": ["03_push_to_sql/push_to_sql/push_to_database.py"],
 }
 TASK_SYNC_ROOTS = {
@@ -28,6 +29,7 @@ TASK_SYNC_ROOTS = {
     "product": ("01_craw_data/category", "01_craw_data/product"),
     "review": ("01_craw_data/product", "01_craw_data/review"),
     "preprocess": ("01_craw_data", "02_process_raw_data"),
+    "validate_silver": ("02_process_raw_data",),
     "push": ("02_process_raw_data",),
     "bootstrap": ("01_craw_data", "02_process_raw_data"),
 }
@@ -200,5 +202,5 @@ def main(task_name: str) -> None:
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
-        raise SystemExit("Usage: python minio_task.py {bootstrap|daily_price|product|review|preprocess|push}")
+        raise SystemExit("Usage: python minio_task.py {bootstrap|daily_price|product|review|preprocess|validate_silver|push}")
     main(sys.argv[1])

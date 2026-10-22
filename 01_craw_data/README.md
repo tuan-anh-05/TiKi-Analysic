@@ -7,7 +7,7 @@ Thư mục này gọi API của Tiki và ghi dữ liệu nguồn vào CSV. Khi c
 | Thư mục | Script/nguồn vào | Kết quả và grain |
 |---|---|---|
 | `category/` | `category.csv`, `sub_category.csv`; notebook khám phá | Danh sách category và đường phân cấp sub-category. Là nguồn tương đối tĩnh, thường nạp một lần. |
-| `daily_price/` | `crawl_daily_price.py`; danh sách `product_pareto.csv` | `daily_price_history.csv`: một sản phẩm/biến thể ở một ngày crawl; `crawl_daily_log.csv`: log kết quả/ lỗi crawl. Sản phẩm đã crawl thành công trong ngày được bỏ qua ở lần sau. |
+| `daily_price/` | `crawl_daily_price.py`; danh sách `product_pareto.csv` | `daily_price_history.csv`: một sản phẩm/biến thể ở một ngày crawl; `crawl_daily_log.csv`: log lỗi có product/variant ID. Lượt 18:00 crawl danh sách; lượt 21:00 đọc log lỗi trong ngày và nối các sản phẩm còn thiếu vào cùng file, không crawl lại sản phẩm đã thành công. |
 | `product/` | `product.py` cùng category | `product.csv` (listing), `product_detail.csv` (thuộc tính sản phẩm), `product_seller.csv` (seller/offer), `product_category.csv` (quan hệ sản phẩm-category). Các file product là snapshot theo tháng. |
 | `review/` | `review.py` cùng dữ liệu sản phẩm/seller | `product_review.csv`: review gắn product/biến thể; khóa nhận diện `(review_id, product_id, seller_product_id)`. |
 
@@ -18,7 +18,7 @@ Tên cột CSV có thể phản ánh trực tiếp payload nguồn; từ điển
 - CSV được tích lũy; script không xóa lịch sử trước khi crawl.
 - File lớn được flush định kỳ để giữ phần đã thu thập nếu tiến trình bị ngắt.
 - Crawler product lưu checkpoint theo danh mục/tháng để có thể tiếp tục phần chưa hoàn tất.
-- Daily price giữ log; sản phẩm trả 404/410 được tạm ngừng thử lại theo logic script.
+- Daily price giữ log lỗi theo product/variant; lượt 21:00 retry các lỗi của lượt 18:00 và nối kết quả vào cùng file ngày. Nếu tiến trình bị ngắt trước khi kịp ghi log, các key chưa có trong file kết quả vẫn có thể được phục hồi ở lần chạy sau. Sản phẩm trả 404/410 được tạm ngừng thử lại theo logic script.
 - Review loại trùng theo bộ ba ID và dùng thứ tự API để dừng khi gặp review đã cũ.
 - Crawl phụ thuộc API/mạng, có thể lâu và bị giới hạn phía Tiki. Không chạy nhiều job cùng lúc trên cùng CSV; DAG đặt `max_active_runs=1`.
 

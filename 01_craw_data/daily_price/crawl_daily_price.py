@@ -85,27 +85,33 @@ for col in ["product_id", "seller_product_id", "category_id"]:
 # 3. BỎ QUA SẢN PHẨM ĐÃ CRAWL HÔM NAY VÀ SẢN PHẨM ĐÃ BỊ XÓA
 # ==================================================
 today = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")).strftime("%Y-%m-%d")
+LOG_COLUMNS = ["log_time", "product_id", "seller_product_id", "error"]
 
 if LOG_FILE.exists() and LOG_FILE.stat().st_size > 0:
     try:
         logs = pd.read_csv(LOG_FILE, encoding="utf-8-sig", low_memory=False)
 
-        if {"log_time", "error"}.issubset(logs.columns):
-            print(f"Log: giữ lại lịch sử {len(logs):,} dòng.")
-        else:
-            # File log không đúng cấu trúc thì khởi tạo lại file rỗng có header.
-            pd.DataFrame(columns=["log_time", "error"]).to_csv(
-                LOG_FILE, index=False, encoding="utf-8-sig"
-            )
-            print("Log: file thiếu cột bắt buộc, đã khởi tạo lại.")
+        if not {"log_time", "error"}.issubset(logs.columns):
+            raise ValueError("Log không có cột log_time/error")
+        # Tương thích log cũ dạng (log_time, error). Không có seller ID thì
+        # lượt retry sẽ chọn mọi biến thể của product_id lỗi.
+        for col in LOG_COLUMNS:
+            if col not in logs.columns:
+                logs[col] = pd.NA
+        logs = logs[LOG_COLUMNS]
+        # Migrate the previous two-column log before appending structured retries.
+        logs.to_csv(LOG_FILE, index=False, encoding="utf-8-sig")
+        print(f"Log: giữ lại lịch sử {len(logs):,} dòng.")
     except (pd.errors.EmptyDataError, pd.errors.ParserError, UnicodeDecodeError):
-        pd.DataFrame(columns=["log_time", "error"]).to_csv(
+        pd.DataFrame(columns=LOG_COLUMNS).to_csv(
             LOG_FILE, index=False, encoding="utf-8-sig"
         )
         print("Log: không đọc được file cũ, đã khởi tạo lại.")
+    except ValueError as exc:
+        raise ValueError(f"File log crawl không hợp lệ: {exc}") from exc
 elif not LOG_FILE.exists():
     # Chưa có file log; tạo file rỗng với header chuẩn.
-    pd.DataFrame(columns=["log_time", "error"]).to_csv(
+    pd.DataFrame(columns=LOG_COLUMNS).to_csv(
         LOG_FILE, index=False, encoding="utf-8-sig"
     )
 
@@ -126,6 +132,36 @@ if SAVE_FILE.exists() and SAVE_FILE.stat().st_size > 0:
         old_today = old.loc[old["crawl_date"].str[:10] == today]
         done = set(zip(old_today["product_id"], old_today["seller_product_id"]))
 
+# Lấy các biến thể lỗi từ log hôm nay để lượt 21:00 retry phần crawl 18:00
+# chưa lấy được. Các key chưa có trong file kết quả cũng được đưa vào để có
+# thể phục hồi nếu tiến trình trước bị dừng trước lúc kịp ghi log.
+failed_keys = set()
+failed_product_ids = set()
+if LOG_FILE.exists() and LOG_FILE.stat().st_size > 0:
+    logs = pd.read_csv(LOG_FILE, encoding="utf-8-sig", low_memory=False)
+    if {"log_time", "error"}.issubset(logs.columns):
+        logs["log_time"] = pd.to_datetime(logs["log_time"], errors="coerce")
+        logs_today = logs.loc[logs["log_time"].dt.strftime("%Y-%m-%d") == today]
+        if "product_id" in logs_today.columns:
+            pids = logs_today["product_id"].dropna().astype("string").str.strip()
+            pids = pids.str.replace(r"\.0$", "", regex=True)
+            failed_product_ids.update(pids[pids.ne("")].tolist())
+        # Log đời cũ không có product_id riêng, chỉ ghi "<id>: <lỗi>".
+        legacy_pids = logs_today["error"].astype("string").str.extract(
+            r"^\s*(\d+)\s*:", expand=False
+        )
+        failed_product_ids.update(legacy_pids.dropna().tolist())
+        if "seller_product_id" in logs_today.columns:
+            for row in logs_today.dropna(
+                subset=["product_id", "seller_product_id"]
+            ).itertuples(index=False):
+                pid = str(row.product_id).strip()
+                spid = str(row.seller_product_id).strip()
+                pid = pid.removesuffix(".0")
+                spid = spid.removesuffix(".0")
+                if pid and spid:
+                    failed_keys.add((pid, spid))
+
 gone_ids = set()
 if GONE_FILE.exists() and GONE_FILE.stat().st_size > 0:
     gone_history = pd.read_csv(
@@ -144,6 +180,16 @@ if done:
     key = pd.MultiIndex.from_frame(df[["product_id", "seller_product_id"]])
     df = df.loc[~key.isin(done)]
 
+if failed_keys or failed_product_ids:
+    key = pd.MultiIndex.from_frame(df[["product_id", "seller_product_id"]])
+    retry_mask = key.isin(failed_keys)
+    if failed_product_ids:
+        retry_mask |= df["product_id"].isin(failed_product_ids).to_numpy()
+    # Nếu log có lỗi hôm nay, lượt tiếp chỉ lấy đúng những biến thể lỗi đó.
+    # Nếu không có log lỗi, giữ các key còn thiếu để phục hồi run bị ngắt đột ngột.
+    if retry_mask.any():
+        df = df.loc[retry_mask]
+
 if gone_ids:
     df = df.loc[~df["product_id"].isin(gone_ids)]
 
@@ -154,6 +200,7 @@ print("Input:", INPUT_FILE)
 print("Output:", SAVE_FILE)
 print("Ngày crawl:", today)
 print("Đã bỏ qua (đã bị xóa từ trước):", len(gone_ids))
+print("Sản phẩm lỗi đọc từ log hôm nay:", len(failed_product_ids | {pid for pid, _ in failed_keys}))
 print("Số sản phẩm cần crawl:", total)
 
 # ==================================================
@@ -273,7 +320,7 @@ def save_records(records):
 
 def save_errors(errors):
     if errors:
-        append_csv(LOG_FILE, errors, ["log_time", "error"])
+        append_csv(LOG_FILE, errors, LOG_COLUMNS)
         errors.clear()
 
 def save_gone(gone):
@@ -303,7 +350,9 @@ def crawl_rows(rows, stage):
             for future in as_completed(future_to_row):
                 row = future_to_row[future]
                 completed += 1
-                now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                now_str = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")).strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                )
 
                 try:
                     record, error, is_gone = future.result()
@@ -326,6 +375,8 @@ def crawl_rows(rows, stage):
                     if stage == 2:
                         errors.append({
                             "log_time": now_str,
+                            "product_id": str(row["product_id"]),
+                            "seller_product_id": str(row["seller_product_id"]),
                             "error": error or f"{row['product_id']}: Lỗi không xác định"
                         })
 

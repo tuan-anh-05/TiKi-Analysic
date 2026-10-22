@@ -43,8 +43,9 @@ Bronze/Silver ở đây là các prefix lưu CSV/JSON trên MinIO, không phải
 2. `minio_task.py` kiểm tra bucket, tải dữ liệu `current` liên quan về working copy trong container.
 3. Crawler gọi Tiki và ghi CSV raw vào `01_craw_data/`; adapter đồng bộ lên `current/bronze/`.
 4. Transform chuẩn hóa raw thành CSV trong `02_process_raw_data/`; adapter đồng bộ lên `current/silver/`.
-5. Loader đọc CSV sạch, chỉ thêm khóa mới vào Supabase, cập nhật `dim_product` theo snapshot mới nhất và đồng bộ checkpoint vào `current/state/`.
-6. Sau khi task load thành công, Power BI refresh từ Supabase.
+5. Kiểm tra schema, khóa, trùng lặp và miền giá trị của Silver trước khi load.
+6. Loader đọc CSV hợp lệ, chỉ thêm khóa mới vào Supabase, cập nhật `dim_product` theo snapshot mới nhất và đồng bộ checkpoint vào `current/state/`.
+7. Sau khi task load thành công, Power BI refresh từ Supabase.
 
 Thấy DAG run hoàn tất chưa đủ để khẳng định DB đã có dữ liệu: cần xem task `load_new_rows_to_supabase` thành công và kiểm tra row count. Một manual trigger không có `conf` có thể không chọn nhánh crawl; dùng config như hướng dẫn dưới.
 
@@ -183,7 +184,18 @@ Power BI Desktop → **Get data → PostgreSQL database**. Host/port/database/us
 
 ## Lịch tự động (giờ Việt Nam — Asia/Ho_Chi_Minh)
 
-DAG kiểm tra lúc 02:00, 10:00, 21:00; `catchup=False`, tối đa một DAG run đồng thời. 21:00 crawl giá (mỗi sản phẩm tối đa một quan sát/ngày); ngày cuối tháng 02:00/10:00 crawl product; ngày mùng 1 02:00/10:00 crawl review. Lượt giá tối chạy transform từ 22:00 và load từ 23:00 nếu các bước trước thành công. Task có tối đa 2 retries với delay tăng dần, trần 1 giờ. Máy và Docker phải luôn bật; lịch local không chạy bù lúc máy tắt.
+Tất cả thời gian dưới đây theo giờ Việt Nam (`Asia/Ho_Chi_Minh`, UTC+7).
+
+| Giờ kích hoạt | Task chạy theo lịch | Ghi chú |
+|---|---|---|
+| 02:00 | Crawl product ngày lẻ; crawl review ngày chẵn | Ngày được tính theo lịch Việt Nam. Sau crawl chạy ETL đầy đủ. |
+| 10:00 | Crawl product ngày lẻ; crawl review ngày chẵn | Ngày được tính theo lịch Việt Nam. Sau crawl chạy ETL đầy đủ. |
+| 18:00 | Crawl giá (`daily_price`) | Crawl lượt đầu; nối kết quả theo ngày vào `daily_price_history.csv`, đồng bộ Bronze rồi chạy ETL đầy đủ. |
+| 21:00 | Crawl tiếp giá (`daily_price`) | Đọc log lỗi trong ngày, retry các product/variant lỗi hoặc còn thiếu và append vào chính file ngày đó; đồng bộ Bronze rồi chạy ETL đầy đủ. |
+
+Trong mỗi lượt có crawl: dữ liệu raw được đồng bộ vào MinIO Bronze ngay khi crawler kết thúc; tiếp đó DAG transform ra Silver, kiểm tra Silver, rồi mới nạp Gold vào Supabase. Nếu crawl, transform hoặc kiểm tra thất bại sau các lần retry, các bước phía sau không chạy. Daily price giữ grain một bản ghi/sản phẩm/ngày: bản ghi thành công lúc 18:00 không bị thay; 21:00 chỉ bổ sung sản phẩm/biến thể còn lỗi hoặc thiếu, nên Silver/Gold vẫn không có bản ghi trùng.
+
+DAG đặt `catchup=False`, tối đa một run hoạt động cùng lúc, và task có tối đa 2 lần retry với delay tăng dần, trần 1 giờ. Máy và Docker phải luôn bật; lịch local không chạy bù khi máy tắt.
 
 ## Sự cố hay gặp và thao tác vận hành
 

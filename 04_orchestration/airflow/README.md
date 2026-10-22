@@ -7,10 +7,10 @@ Thư mục này chứa Docker Compose, DAG `tiki_extract_transform_load` và ada
 ```text
 Tiki -> crawler -> CSV working copy -> MinIO current/bronze
     -> transform -> CSV processed -> MinIO current/silver
-    -> loader -> Supabase PostgreSQL (checkpoint -> MinIO current/state)
+    -> validate Silver -> loader -> Supabase PostgreSQL (checkpoint -> MinIO current/state)
 ```
 
-Adapter tải object hiện hành cần cho task xuống working copy, chạy script gốc trong `01_craw_data/`, `02_process_raw_data/` hoặc `03_push_to_sql/`, rồi upload file thay đổi. Khi thay object current, object trước được copy vào `history/<run-id>/...`. CSV lớn được tải/truyền như một object đầy đủ. Git/LFS chỉ cung cấp snapshot nguồn ban đầu; task không commit dữ liệu phát sinh.
+Adapter tải object hiện hành cần cho task xuống working copy, chạy script gốc trong `01_craw_data/`, `02_process_raw_data/` hoặc `03_push_to_sql/`, rồi upload file thay đổi. Mỗi task crawl đồng bộ Bronze khi crawler kết thúc (kể cả khi lệnh crawl lỗi, để giữ dữ liệu partial/checkpoint trước khi retry); preprocessing đồng bộ Silver; loader đồng bộ checkpoint state. Khi thay object current, object trước được copy vào `history/<run-id>/...`. CSV lớn được tải/truyền như một object đầy đủ. Git/LFS chỉ cung cấp snapshot nguồn ban đầu; task không commit dữ liệu phát sinh.
 
 ## Điều kiện
 
@@ -88,7 +88,16 @@ docker compose logs -f minio
 
 ## Lịch DAG (giờ Việt Nam — Asia/Ho_Chi_Minh)
 
-Cron tạo run lúc 02:00, 10:00, 21:00; các gate trong DAG chọn task tương ứng. 21:00 hằng ngày crawl giá; sản phẩm đã crawl trong ngày bị bỏ qua. Ngày cuối tháng 02:00 và 10:00 crawl product. Ngày mùng 1 02:00 và 10:00 crawl review. Sau lượt giá, DAG đợi 22:00 để transform và 23:00 để load. Có tối đa 2 retries/task, delay tăng dần tối đa 1 giờ; `max_active_runs=1`. Tắt máy/Docker thì lịch không chạy và không tự bù.
+Tất cả thời gian dưới đây theo giờ Việt Nam (`Asia/Ho_Chi_Minh`, UTC+7).
+
+| Giờ kích hoạt | Task chạy theo lịch | Ghi chú |
+|---|---|---|
+| 02:00 | Crawl product ngày lẻ; crawl review ngày chẵn | Theo ngày Việt Nam; sau crawl DAG chạy ETL đầy đủ. |
+| 10:00 | Crawl product ngày lẻ; crawl review ngày chẵn | Theo ngày Việt Nam; sau crawl DAG chạy ETL đầy đủ. |
+| 18:00 | Crawl giá (`daily_price`) | Crawl lượt đầu; đồng bộ Bronze rồi chạy ETL đầy đủ. |
+| 21:00 | Crawl tiếp giá (`daily_price`) | Đọc log lỗi trong ngày, retry phần còn thiếu và nối vào cùng file ngày; đồng bộ Bronze rồi chạy ETL đầy đủ. |
+
+Trong mỗi lượt có crawl, adapter đồng bộ raw lên MinIO Bronze ngay sau crawler; DAG tiếp tục transform ra Silver, kiểm tra Silver rồi mới load Gold vào Supabase. Lượt 21:00 đọc log lỗi trong ngày, retry các product/variant chưa thành công và append vào cùng `daily_price_history.csv`; adapter tải trạng thái Bronze hiện tại từ MinIO trước khi chạy và lưu file cập nhật sau crawl. Nếu upstream lỗi sau retry, các bước downstream bị chặn. DAG đặt `catchup=False`, tối đa một run hoạt động cùng lúc, và task có tối đa 2 lần retry với delay tăng dần, trần 1 giờ. Loader lọc khóa đã có trong PostgreSQL và dùng unique keys/`ON CONFLICT DO NOTHING`, nên retry sau lỗi giữa chừng không chèn bản ghi trùng. Kiểm tra Silver xác nhận file/cột bắt buộc, khóa không rỗng và duy nhất, ngày đúng định dạng, cùng các miền giá trị chính trước khi load. Giá giữ grain một bản ghi/sản phẩm/ngày: dữ liệu thành công lúc 18:00 không bị ghi đè; 21:00 bổ sung các sản phẩm/biến thể còn thiếu. Máy và Docker phải luôn bật; lịch local không chạy bù khi máy tắt.
 
 ## Vận hành và sửa lỗi
 
