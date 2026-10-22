@@ -1,6 +1,6 @@
 # 01 — Crawl data
 
-Chứa mã nguồn crawl và CSV thô. Workflow GitHub Actions gọi các file Python; notebook được giữ để chạy/tham khảo thủ công.
+Chứa mã nguồn crawl và CSV Bronze ban đầu. Airflow gọi các script Python; MinIO là nơi lưu bền vững cho dữ liệu sau khi bootstrap. Notebook được giữ để khám phá/tham khảo, không nằm trong luồng chạy tự động.
 
 ## Thư mục và dữ liệu
 
@@ -27,4 +27,4 @@ python 01_craw_data/product/product.py
 python 01_craw_data/review/review.py
 ```
 
-`daily_price` cần file đầu vào `01_craw_data/daily_price/product_pareto.csv`; product cần category đã có; review cần product detail và seller data. Xem lịch tự động ở README gốc.
+`daily_price` cần file đầu vào `01_craw_data/daily_price/product_pareto.csv`; product cần category đã có; review cần product detail và seller data. Chạy tự động qua Airflow; xem thiết lập tại [`../04_orchestration/airflow/README.md`](../04_orchestration/airflow/README.md).

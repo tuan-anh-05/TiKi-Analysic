@@ -1,0 +1,6 @@
+# Runtime dependencies for the existing Tiki scripts and MinIO S3 adapter.
+pandas
+requests
+psycopg2-binary
+SQLAlchemy
+boto3

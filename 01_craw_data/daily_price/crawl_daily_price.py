@@ -5,6 +5,7 @@ Crawl dữ liệu giá hằng ngày từ Tiki.
 
 # %% Cell 1
 from pathlib import Path
+import os
 from datetime import datetime
 from urllib.parse import urlparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -22,7 +23,8 @@ if not (PROJECT_DIR / "01_craw_data").is_dir():
             PROJECT_DIR = parent
             break
 
-PRICE_DIR = PROJECT_DIR / "01_craw_data" / "daily_price"
+DATA_ROOT = Path(os.environ.get("TIKI_DATA_DIR", PROJECT_DIR)).resolve()
+PRICE_DIR = DATA_ROOT / "01_craw_data" / "daily_price"
 PRICE_DIR.mkdir(parents=True, exist_ok=True)
 
 INPUT_FILE = PRICE_DIR / "product_pareto.csv"

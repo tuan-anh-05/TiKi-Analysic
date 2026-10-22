@@ -5,6 +5,7 @@ Ghi vào: 02_process_raw_data/product/
 """
 
 from pathlib import Path
+import os
 from datetime import datetime
 from zoneinfo import ZoneInfo
 import pandas as pd
@@ -80,7 +81,8 @@ def clean_product_detail(input_file: Path, output_file: Path) -> pd.DataFrame:
     df["brand_id"] = pd.to_numeric(df["brand_id"], errors="coerce").astype("Int64")
     if "brand_name" in df.columns:
         df["brand_name"] = df["brand_name"].astype(str).str.strip()
-        df["brand_name"] = df["brand_name"].replace({"nan": "No Brand", "None": "No Brand", "": "No Brand"})
+        df["brand_name"] = df["brand_name"].replace({"nan": "Không thương hiệu", "None": "Không thương hiệu", "": "Không thương hiệu"})
+        df.loc[df["brand_name"].str.casefold().isin({"oem", "no brand", "no-brand", "unbranded"}), "brand_name"] = "Không thương hiệu"
 
     # 4. Chuẩn hóa chỉ số số học
     df["favourite_count"] = pd.to_numeric(df["favourite_count"], errors="coerce").fillna(0).astype("int64")
@@ -205,8 +207,9 @@ def clean_product_category(input_file: Path, output_file: Path) -> pd.DataFrame:
 
 def main():
     project_dir = get_project_dir()
-    raw_dir = project_dir / "01_craw_data" / "product"
-    proc_dir = project_dir / "02_process_raw_data" / "product"
+    data_root = Path(os.environ.get("TIKI_DATA_DIR", project_dir)).resolve()
+    raw_dir = data_root / "01_craw_data" / "product"
+    proc_dir = data_root / "02_process_raw_data" / "product"
 
     print("=" * 60)
     print("BẮT ĐẦU TIỀN XỬ LÝ DỮ LIỆU SẢN PHẨM")

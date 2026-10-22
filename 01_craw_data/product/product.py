@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 import json
 import time
 import random
@@ -15,10 +16,11 @@ if not (PROJECT_DIR / "01_craw_data").is_dir():
     else:
         raise FileNotFoundError("Không tìm thấy thư mục 01_craw_data")
 
-DATA_DIR = PROJECT_DIR / "01_craw_data" / "product"
+DATA_ROOT = Path(os.environ.get("TIKI_DATA_DIR", PROJECT_DIR)).resolve()
+DATA_DIR = DATA_ROOT / "01_craw_data" / "product"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-CATEGORIES_FILE = PROJECT_DIR / "01_craw_data" / "category" / "category.csv"
+CATEGORIES_FILE = DATA_ROOT / "01_craw_data" / "category" / "category.csv"
 INPUT_FILE = DATA_DIR / "product.csv"              
 LISTING_CHECKPOINT_FILE = DATA_DIR / "listing_checkpoint.json"
 PRODUCT_FILE = DATA_DIR / "product_detail.csv"

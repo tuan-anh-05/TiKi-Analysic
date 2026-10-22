@@ -5,7 +5,7 @@ Chuẩn hóa CSV từ `01_craw_data/` cho mục tiêu phân tích và nạp Post
 ## Các nhóm dữ liệu
 
 - `category/process_category.py`: chuẩn hóa danh mục tĩnh.
-- `daily_price/process_daily_price.py`: chỉ xử lý các dòng có `crawl_date` là ngày hiện tại theo `Asia/Bangkok`; nối khóa mới vào lịch sử sạch.
+- `daily_price/process_daily_price.py`: xử lý mọi ngày hợp lệ có trong raw, nối các khóa `(product_id, seller_product_id, crawl_date)` chưa có vào lịch sử sạch. Cách này cho phép bù ngày khi lượt preprocess bị trễ hoặc retry sau nửa đêm.
 - `product/process_product.py`: lọc listing/detail/seller/product-category theo tháng hiện tại, chuẩn hóa ID và ghi snapshot tháng ra các CSV sạch.
 - `review/process_review.py`: xử lý theo chunk; chuẩn hóa dữ liệu và chỉ nối các review mới theo khóa ba cột `(review_id, product_id, seller_product_id)`.
 - `run_all_preprocessing.py`: chạy các module tiền xử lý theo thứ tự.

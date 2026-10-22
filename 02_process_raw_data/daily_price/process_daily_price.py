@@ -3,11 +3,10 @@ Tiền xử lý dữ liệu Theo dõi Giá Hằng Ngày (Daily Price)
 Đọc từ: 01_craw_data/daily_price/
 Ghi vào: 02_process_raw_data/daily_price/
 """
-from datetime import datetime
 from pathlib import Path
+import os
 import re
 import pandas as pd
-from zoneinfo import ZoneInfo
 
 
 def get_project_dir() -> Path:
@@ -37,14 +36,11 @@ def clean_daily_price_history(input_file: Path, output_file: Path) -> pd.DataFra
     # 2. Chuẩn hóa ngày crawl (YYYY-MM-DD)
     df["crawl_date"] = pd.to_datetime(df["crawl_date"], errors="coerce").dt.strftime("%Y-%m-%d")
     
-    # Xác định ngày xử lý trước khi sử dụng biến today
-    today = datetime.now(ZoneInfo("Asia/Bangkok")).strftime("%Y-%m-%d")
-    print(f"Ngày xử lý: {today}")
-    print("Phân bố trước lọc:")
+    # Xử lý toàn bộ ngày có trong raw. Nếu một lần chạy trễ hoặc bị gián đoạn,
+    # các ngày chưa xử lý vẫn sẽ được nối vào lịch sử ở lần chạy kế tiếp.
+    print("Phân bố ngày crawl trong raw:")
     print(df["crawl_date"].value_counts(dropna=False).sort_index())
-    
-    # Chỉ giữ dữ liệu có crawl_date trùng ngày xử lý
-    df = df.loc[df["crawl_date"] == today].copy()
+    df = df.loc[df["crawl_date"].notna()].copy()
     df = df.dropna(subset=id_cols + ["crawl_date"])
     for col in id_cols:
         df[col] = df[col].astype("int64")
@@ -118,15 +114,16 @@ def clean_daily_price_history(input_file: Path, output_file: Path) -> pd.DataFra
             encoding="utf-8" if has_data else "utf-8-sig",
         )
 
-    print(f"  ✓ Trước: {initial_len:,} dòng | Ngày hiện tại sau lọc: {len(df):,} dòng")
+    print(f"  ✓ Raw: {initial_len:,} dòng | Dòng hợp lệ mọi ngày: {len(df):,}")
     print(f"  ✓ Dòng mới được nối: {len(new_df):,} | File lịch sử: {output_file}")
     return new_df
 
 
 def main():
     project_dir = get_project_dir()
-    raw_dir = project_dir / "01_craw_data" / "daily_price"
-    proc_dir = project_dir / "02_process_raw_data" / "daily_price"
+    data_root = Path(os.environ.get("TIKI_DATA_DIR", project_dir)).resolve()
+    raw_dir = data_root / "01_craw_data" / "daily_price"
+    proc_dir = data_root / "02_process_raw_data" / "daily_price"
 
     print("=" * 60)
     print("BẮT ĐẦU TIỀN XỬ LÝ DỮ LIỆU THEO DÕI GIÁ HẰNG NGÀY")

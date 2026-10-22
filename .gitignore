@@ -5,6 +5,18 @@ __pycache__/
 venv/
 .env
 
+# Local Airflow / MinIO secrets, metadata, and runtime logs
+04_orchestration/airflow/.env
+04_orchestration/airflow/minio.license
+04_orchestration/airflow/logs/
+04_orchestration/airflow/plugins/
+04_orchestration/airflow/config/
+04_orchestration/airflow/.airflowignore
+
+# Runtime crawl logs and Supabase sync state are local/MinIO-managed.
+01_craw_data/daily_price/crawl_daily_log.csv
+03_push_to_sql/sync_checkpoint_supabase.json
+
 # Duplicate local export; the canonical raw review file is product_review.csv.
 01_craw_data/review/product_review copy.csv
 

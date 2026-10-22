@@ -5,6 +5,7 @@ Ghi vào: 02_process_raw_data/category/
 """
 
 from pathlib import Path
+import os
 import pandas as pd
 
 
@@ -87,8 +88,9 @@ def clean_sub_categories(input_file: Path, output_file: Path, valid_cat_ids: set
 
 def main():
     project_dir = get_project_dir()
-    raw_dir = project_dir / "01_craw_data" / "category"
-    proc_dir = project_dir / "02_process_raw_data" / "category"
+    data_root = Path(os.environ.get("TIKI_DATA_DIR", project_dir)).resolve()
+    raw_dir = data_root / "01_craw_data" / "category"
+    proc_dir = data_root / "02_process_raw_data" / "category"
 
     print("=" * 60)
     print("BẮT ĐẦU TIỀN XỬ LÝ DỮ LIỆU DANH MỤC")

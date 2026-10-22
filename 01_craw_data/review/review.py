@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import random
 import time
 from datetime import datetime
@@ -236,7 +237,7 @@ def crawl_reviews(project_dir: Path, limit: int | None = None) -> None:
             while True:
                 params = {
                     "limit": PAGE_LIMIT,
-                    "include": "contribute_info,attribute_vote_summary",
+                    "include": "contribute_info",
                     "sort": SORT_MODE,
                     "page": page,
                     "spid": seller_product_id,
@@ -314,7 +315,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Incrementally crawl Tiki product reviews")
     parser.add_argument("--limit", type=int, default=None, help="Giới hạn số sản phẩm để crawl thử")
     args = parser.parse_args()
-    crawl_reviews(find_project_dir(), limit=args.limit)
+    data_root = Path(os.environ.get("TIKI_DATA_DIR", find_project_dir())).resolve()
+    crawl_reviews(data_root, limit=args.limit)
 
 
 if __name__ == "__main__":

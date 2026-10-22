@@ -128,9 +128,9 @@ def keep_rows_missing_from_database(
     return df.loc[is_new].copy(), [key for key, keep in zip(keys, is_new) if keep]
 
 
-def push_incremental_postgres(project_dir: Path, db_url: str, log_file: Path):
+def push_incremental_postgres(project_dir: Path, data_root: Path, db_url: str, log_file: Path):
     # Keep Supabase state separate from the previous local database checkpoint.
-    checkpoint_file = project_dir / "03_push_to_sql" / "sync_checkpoint_supabase.json"
+    checkpoint_file = data_root / "03_push_to_sql" / "sync_checkpoint_supabase.json"
     cp = load_checkpoint(checkpoint_file)
 
     log_msg(log_file, "Kết nối đến cơ sở dữ liệu Supabase PostgreSQL...")
@@ -151,7 +151,7 @@ def push_incremental_postgres(project_dir: Path, db_url: str, log_file: Path):
             cursor.execute(f.read())
         conn.commit()
 
-    proc_dir = project_dir / "02_process_raw_data"
+    proc_dir = data_root / "02_process_raw_data"
     total_new_rows = 0
     start_total = time.time()
 
@@ -355,7 +355,8 @@ def push_incremental_postgres(project_dir: Path, db_url: str, log_file: Path):
 
 def main():
     project_dir = get_project_dir()
-    logs_dir = project_dir / "03_push_to_sql" / "logs"
+    data_root = Path(os.environ.get("TIKI_DATA_DIR", project_dir)).resolve()
+    logs_dir = data_root / "03_push_to_sql" / "logs"
     logs_dir.mkdir(parents=True, exist_ok=True)
     log_file = logs_dir / f"push_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
 
@@ -378,7 +379,7 @@ def main():
         log_msg(log_file, "[LỖI] Không tìm thấy biến môi trường SUPABASE_DB_URL!")
         sys.exit(1)
 
-    push_incremental_postgres(project_dir, db_url, log_file)
+    push_incremental_postgres(project_dir, data_root, db_url, log_file)
 
 
 if __name__ == "__main__":
