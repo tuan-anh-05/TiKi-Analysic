@@ -30,7 +30,7 @@ LISTING_URL = "https://tiki.vn/api/personalish/v1/blocks/listings"
 API_URL = "https://tiki.vn/api/v2/products/{}"
 SAVE_EVERY = 100
 REQUEST_DELAY = (3, 5)
-MAX_RETRIES = 3
+MAX_RETRIES = 2
 CRAWL_DATE = pd.Timestamp.now(tz="Asia/Bangkok").strftime("%Y-%m")   # Chỉ lấy tháng năm
 
 session = requests.Session()
