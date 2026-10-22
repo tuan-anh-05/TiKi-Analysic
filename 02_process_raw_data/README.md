@@ -1,21 +1,26 @@
-# 02 — Process raw data
+# Làm sạch và chuẩn hóa (Transform / Silver)
 
-Chuẩn hóa CSV từ `01_craw_data/` cho mục tiêu phân tích và nạp PostgreSQL.
+Các script ở đây đọc CSV raw trong `01_craw_data/`, chuẩn hóa dữ liệu cho phân tích và ghi CSV đã xử lý. Qua Airflow, adapter MinIO tải raw cần thiết về working copy, chạy transform, rồi đồng bộ kết quả lên prefix `current/silver/`. Raw được giữ để có thể xử lý lại.
 
-## Các nhóm dữ liệu
+## Các bước
 
-- `category/process_category.py`: chuẩn hóa danh mục tĩnh.
-- `daily_price/process_daily_price.py`: xử lý mọi ngày hợp lệ có trong raw, nối các khóa `(product_id, seller_product_id, crawl_date)` chưa có vào lịch sử sạch. Cách này cho phép bù ngày khi lượt preprocess bị trễ hoặc retry sau nửa đêm.
-- `product/process_product.py`: lọc listing/detail/seller/product-category theo tháng hiện tại, chuẩn hóa ID và ghi snapshot tháng ra các CSV sạch.
-- `review/process_review.py`: xử lý theo chunk; chuẩn hóa dữ liệu và chỉ nối các review mới theo khóa ba cột `(review_id, product_id, seller_product_id)`.
-- `run_all_preprocessing.py`: chạy các module tiền xử lý theo thứ tự.
-- `pareto/pareto_category.ipynb`: notebook phân tích Pareto.
+| Module | Việc thực hiện / đầu ra |
+|---|---|
+| `category/process_category.py` | Chuẩn hóa category và đường phân cấp; đầu ra `category/category.csv`, `category/sub_category.csv`. |
+| `daily_price/process_daily_price.py` | Xử lý các ngày hợp lệ từ raw, nối các khóa `(product_id, seller_product_id, crawl_date)` chưa có vào `daily_price/daily_price_history.csv`. Giúp bù ngày nếu transform chạy muộn hoặc retry sau nửa đêm. |
+| `product/process_product.py` | Chuẩn hóa listing/detail/seller/product-category, lọc snapshot tháng hiện tại và ghi CSV product sạch. |
+| `review/process_review.py` | Đọc theo chunk, chuẩn hóa và chỉ nối review mới theo `(review_id, product_id, seller_product_id)`. |
+| `run_all_preprocessing.py` | Chạy các module trên theo thứ tự. |
+| `pareto/pareto_category.ipynb` | Notebook phân tích Pareto, không nằm trong DAG. |
 
-## Lưu ý về ghi file
+## Cách hiểu dữ liệu đầu ra
 
-Daily price và review được tích lũy, không ghi đè lịch sử. Các CSV product sạch là snapshot của tháng hiện tại và được tạo lại từ dữ liệu raw có `crawl_date` thuộc tháng đó. Bản raw vẫn được giữ để có thể xử lý lại.
+- Daily price và review là lịch sử tích lũy, không ghi đè các ngày/review đã có.
+- Các CSV product là snapshot tháng hiện tại và được tạo từ raw có `crawl_date` thuộc tháng đó; chúng không phải lịch sử snapshot lâu dài trong cùng file sạch.
+- Các khóa giúp tránh lặp khi chạy lại, nhưng không sửa nội dung của một key cũ trong bảng fact.
+- Cột `crawl_date` của product biểu diễn tháng (`YYYY-MM`), daily price biểu diễn ngày (`YYYY-MM-DD`).
 
-## Chạy
+## Chạy thủ công
 
 Từ thư mục gốc:
 
@@ -23,4 +28,4 @@ Từ thư mục gốc:
 python 02_process_raw_data/run_all_preprocessing.py
 ```
 
-Hoặc chạy từng file `process_*.py` trong thư mục dữ liệu tương ứng. Workflow tự động gọi master script hằng ngày lúc 22:00 giờ `Asia/Bangkok`.
+Hoặc chạy module `process_*.py` riêng. Cần raw đầu vào tương ứng. Lệnh thủ công chỉ cập nhật CSV local; để đồng bộ MinIO hãy gọi adapter trong Compose, còn để nạp Supabase cần chạy loader. Trong DAG, preprocess chạy sau lượt giá 21:00, từ 22:00 giờ `Asia/Bangkok`. Xem [README tổng](../README.md) cho end-to-end.
