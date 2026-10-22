@@ -37,7 +37,7 @@ PRICE_DIR.mkdir(parents=True, exist_ok=True)
 # 1. CẤU HÌNH
 # ==================================================
 MAX_WORKERS = 4
-MAX_RETRIES = 3
+MAX_RETRIES = 2
 SAVE_EVERY = 30
 BATCH_SIZE = 120
 TIMEOUT = 20
