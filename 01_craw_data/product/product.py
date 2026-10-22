@@ -33,7 +33,7 @@ API_URL = "https://tiki.vn/api/v2/products/{}"
 SAVE_EVERY = 100
 REQUEST_DELAY = (3, 5)
 MAX_RETRIES = 3
-CRAWL_DATE = pd.Timestamp.now(tz="Asia/Bangkok").strftime("%Y-%m")   # Chỉ lấy tháng năm
+CRAWL_DATE = pd.Timestamp.now(tz="Asia/Ho_Chi_Minh").strftime("%Y-%m")   # Chỉ lấy tháng năm
 
 session = requests.Session()
 session.headers.update({

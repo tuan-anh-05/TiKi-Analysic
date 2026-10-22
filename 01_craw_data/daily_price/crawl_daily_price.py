@@ -84,7 +84,7 @@ for col in ["product_id", "seller_product_id", "category_id"]:
 # ==================================================
 # 3. BỎ QUA SẢN PHẨM ĐÃ CRAWL HÔM NAY VÀ SẢN PHẨM ĐÃ BỊ XÓA
 # ==================================================
-today = datetime.now(ZoneInfo("Asia/Bangkok")).strftime("%Y-%m-%d")
+today = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")).strftime("%Y-%m-%d")
 
 if LOG_FILE.exists() and LOG_FILE.stat().st_size > 0:
     try:

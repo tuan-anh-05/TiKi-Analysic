@@ -86,7 +86,7 @@ docker compose logs -f airflow-scheduler
 docker compose logs -f minio
 ```
 
-## Lịch DAG (Asia/Bangkok)
+## Lịch DAG (giờ Việt Nam — Asia/Ho_Chi_Minh)
 
 Cron tạo run lúc 02:00, 10:00, 21:00; các gate trong DAG chọn task tương ứng. 21:00 hằng ngày crawl giá; sản phẩm đã crawl trong ngày bị bỏ qua. Ngày cuối tháng 02:00 và 10:00 crawl product. Ngày mùng 1 02:00 và 10:00 crawl review. Sau lượt giá, DAG đợi 22:00 để transform và 23:00 để load. Có tối đa 2 retries/task, delay tăng dần tối đa 1 giờ; `max_active_runs=1`. Tắt máy/Docker thì lịch không chạy và không tự bù.
 

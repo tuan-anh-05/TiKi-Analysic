@@ -181,7 +181,7 @@ docker compose logs -f minio
 
 Power BI Desktop → **Get data → PostgreSQL database**. Host/port/database/user lấy từ Supabase **Connect**; database thường `postgres`; bật SSL/Require; nhập DB password. Chọn **Import** để giảm kết nối mở lâu, chọn hai view `vw_daily_price_analysis`, `vw_review_analysis` để bắt đầu, hoặc chọn bảng riêng để tự model. Tạo biểu đồ giá theo ngày/brand, discount, review rating và sản phẩm theo category. Khi loader thành công, nhấn **Refresh**. Repo chưa có `.pbix` dựng sẵn, nên cần tự tạo report; publish/refresh Power BI Service là bước ngoài stack local.
 
-## Lịch tự động (Asia/Bangkok)
+## Lịch tự động (giờ Việt Nam — Asia/Ho_Chi_Minh)
 
 DAG kiểm tra lúc 02:00, 10:00, 21:00; `catchup=False`, tối đa một DAG run đồng thời. 21:00 crawl giá (mỗi sản phẩm tối đa một quan sát/ngày); ngày cuối tháng 02:00/10:00 crawl product; ngày mùng 1 02:00/10:00 crawl review. Lượt giá tối chạy transform từ 22:00 và load từ 23:00 nếu các bước trước thành công. Task có tối đa 2 retries với delay tăng dần, trần 1 giờ. Máy và Docker phải luôn bật; lịch local không chạy bù lúc máy tắt.
 

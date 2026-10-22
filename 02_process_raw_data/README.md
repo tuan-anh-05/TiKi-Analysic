@@ -28,4 +28,4 @@ Từ thư mục gốc:
 python 02_process_raw_data/run_all_preprocessing.py
 ```
 
-Hoặc chạy module `process_*.py` riêng. Cần raw đầu vào tương ứng. Lệnh thủ công chỉ cập nhật CSV local; để đồng bộ MinIO hãy gọi adapter trong Compose, còn để nạp Supabase cần chạy loader. Trong DAG, preprocess chạy sau lượt giá 21:00, từ 22:00 giờ `Asia/Bangkok`. Xem [README tổng](../README.md) cho end-to-end.
+Hoặc chạy module `process_*.py` riêng. Cần raw đầu vào tương ứng. Lệnh thủ công chỉ cập nhật CSV local; để đồng bộ MinIO hãy gọi adapter trong Compose, còn để nạp Supabase cần chạy loader. Trong DAG, preprocess chạy sau lượt giá 21:00, từ 22:00 giờ Việt Nam (`Asia/Ho_Chi_Minh`). Xem [README tổng](../README.md) cho end-to-end.

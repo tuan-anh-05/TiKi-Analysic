@@ -17,7 +17,7 @@ from airflow.sensors.python import PythonSensor
 
 PROJECT_DIR = Path(os.environ.get("TIKI_PROJECT_DIR", "/opt/tiki/project"))
 RUNNER = PROJECT_DIR / "04_orchestration" / "airflow" / "scripts" / "minio_task.py"
-LOCAL_TZ = pendulum.timezone("Asia/Bangkok")
+LOCAL_TZ = pendulum.timezone("Asia/Ho_Chi_Minh")
 DEFAULT_ARGS = {
     "owner": "tiki-data",
     "depends_on_past": False,
@@ -30,7 +30,7 @@ DEFAULT_ARGS = {
 
 def local_run_time(**context):
     # Cron-triggered Airflow runs expose the scheduled boundary as data_interval_end.
-    return context["data_interval_end"].in_timezone("Asia/Bangkok")
+    return context["data_interval_end"].in_timezone("Asia/Ho_Chi_Minh")
 
 
 def requested_manual_task(**context):
@@ -75,7 +75,7 @@ def is_manual_data_run(**context) -> bool:
 
 
 def time_is_at_or_after(hour: int) -> bool:
-    return pendulum.now("Asia/Bangkok").hour >= hour
+    return pendulum.now("Asia/Ho_Chi_Minh").hour >= hour
 
 
 def wait_for_22(**context) -> bool:
