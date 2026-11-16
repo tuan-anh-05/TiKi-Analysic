@@ -94,6 +94,10 @@ Mô hình dữ liệu được thiết kế tối ưu cho phân tích OLAP và k
 erDiagram
     DIM_CATEGORY ||--o{ DIM_SUB_CATEGORY : "has sub-categories"
     DIM_CATEGORY ||--o{ PRODUCT_CATEGORY_MAP : "maps to"
+    DIM_CATEGORY ||--o{ DIM_PRODUCT_LISTING : "categorizes"
+
+    DIM_PRODUCT ||--o{ PRODUCT_DETAIL : "monthly snapshots"
+    DIM_PRODUCT ||--o{ DIM_PRODUCT_LISTING : "listed in"
     DIM_PRODUCT ||--o{ PRODUCT_CATEGORY_MAP : "categorized by"
     DIM_PRODUCT ||--o{ PRODUCT_SELLER : "sold by"
     DIM_PRODUCT ||--o{ FACT_DAILY_PRICE : "price tracked in"
@@ -109,6 +113,35 @@ erDiagram
         int review_count
         bigint all_time_quantity_sold
         varchar latest_crawl_month
+    }
+
+    PRODUCT_DETAIL {
+        bigint product_id PK
+        varchar crawl_date PK
+        bigint master_id
+        varchar sku
+        text product_name
+        varchar brand_name
+        numeric rating_average
+        int review_count
+        bigint all_time_quantity_sold
+    }
+
+    DIM_PRODUCT_LISTING {
+        bigint product_id PK
+        bigint seller_product_id PK
+        bigint category_id PK
+        varchar crawl_date PK
+    }
+
+    PRODUCT_CATEGORY_MAP {
+        bigserial id PK
+        bigint product_id FK
+        bigint category_id FK
+        varchar category_name
+        int category_level
+        boolean is_primary
+        varchar crawl_date
     }
 
     DIM_CATEGORY {
@@ -134,6 +167,7 @@ erDiagram
         bigint seller_price
         boolean is_current_seller
         boolean is_best_store
+        varchar crawl_date
     }
 
     FACT_DAILY_PRICE {
