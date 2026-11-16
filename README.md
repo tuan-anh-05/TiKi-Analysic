@@ -1,221 +1,287 @@
-# Tiki Analytics — hướng dẫn từ A đến Z
+# Tiki E-Commerce Analytics: End-to-End Pipeline & Business Intelligence
 
-Dự án phân tích dữ liệu Tiki theo luồng **crawl → lưu raw → làm sạch → lưu dữ liệu sạch → nạp PostgreSQL → báo cáo Power BI**. Airflow và MinIO chạy local bằng Docker Desktop; Supabase PostgreSQL là kho dữ liệu phân tích.
+[![Python](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Supabase-4169E1?logo=postgresql&logoColor=white)](https://supabase.com/)
+[![Apache Airflow](https://img.shields.io/badge/Apache%20Airflow-2.10.5-017CEE?logo=apacheairflow&logoColor=white)](https://airflow.apache.org/)
+[![MinIO](https://img.shields.io/badge/MinIO-Object%20Storage-C72C48?logo=minio&logoColor=white)](https://min.io/)
+[![Power BI](https://img.shields.io/badge/Power%20BI-Data%20Visualization-F2C811?logo=powerbi&logoColor=black)](https://powerbi.microsoft.com/)
+[![Unit Tests](https://img.shields.io/badge/Unit%20Tests-16%20Passed-brightgreen?logo=pytest&logoColor=white)](tests/)
+[![Data Contracts](https://img.shields.io/badge/Data%20Contracts-8%20Verified-blue)](02_process_raw_data/validate_silver.py)
 
-## Kiến trúc
+Dự án phân tích dữ liệu thương mại điện tử Tiki toàn diện (End-to-End Analytics Portfolio Project): Thu thập dữ liệu thô tự động từ Tiki API, làm sạch & kiểm định chất lượng theo kiến trúc Medallion (Bronze ➔ Silver ➔ Gold), lưu trữ Lakehouse (MinIO S3 + Supabase PostgreSQL) và trực quan hóa phân tích chiến lược kinh doanh trên Power BI & SQL.
+
+---
+
+## 📑 Mục lục (Table of Contents)
+* [1. Bài toán kinh doanh & Mục tiêu phân tích (Business Problem)](#1-bài-toán-kinh-doanh--mục-tiêu-phân-tích-business-problem)
+* [2. Phát hiện cốt lõi & Khuyến nghị hành động (Key Insights & Actionable Recommendations)](#2-phát-hiện-cốt-lõi--khuyến-nghị-hành-động-key-insights--actionable-recommendations)
+* [3. Kiến trúc hệ thống (Medallion & Lakehouse Architecture)](#3-kiến-trúc-hệ-thống-medallion--lakehouse-architecture)
+* [4. Mô hình dữ liệu chuẩn Star Schema (Gold Layer)](#4-mô-hình-dữ-liệu-chuẩn-star-schema-gold-layer)
+* [5. Cấu trúc thư mục dự án & Tài liệu chi tiết từng module](#5-cấu-trúc-thư-mục-dự-án)
+* [6. Lập lịch điều phối (Airflow Orchestration)](#6-lập-lịch-điều-phối-airflow-orchestration)
+* [7. Hướng dẫn cài đặt & Kiểm thử chất lượng (Setup & Verification)](#7-hướng-dẫn-cài-đặt--khởi-chạy-nhanh)
+* [8. Kỹ năng nổi bật thể hiện trong dự án (Skills Showcase)](#8-kỹ-năng-nổi-bật-thể-hiện-trong-dự-án-skills-showcase)
+
+---
+
+## 1. Bài toán kinh doanh & Mục tiêu phân tích (Business Problem)
+
+Thương mại điện tử Việt Nam cạnh tranh khốc liệt về **giá bán, khuyến mãi và chất lượng dịch vụ**. Dự án này được xây dựng nhằm giải quyết 4 câu hỏi quản trị kinh doanh then chốt của sàn thương mại điện tử:
+
+1. **Quy luật Pareto (80/20) trong danh mục sản phẩm**: Những thương hiệu và danh mục nào đang đóng góp 80% tổng sản lượng và doanh số ước tính?
+2. **Hiệu quả của chiến lược giảm giá (Discount Elasticity)**: Mức giảm giá sâu (>30% hoặc >50%) có thực sự thúc đẩy sản lượng bán ra, hay chỉ làm xói mòn biên lợi nhuận của nhà bán hàng?
+3. **Cạnh tranh giữa Gian hàng chính hãng (Tiki Trading) và Đối tác sàn (3P Sellers)**: Tỷ trọng thị phần, chênh lệch giá bán và tỷ lệ chiếm lĩnh hộp mua hàng (Buy Box/Best Store) giữa 1P và 3P.
+4. **Phân tích tiếng nói khách hàng (Customer Sentiment & Trust)**: Tỷ lệ đánh giá 1-2 sao phân bổ ở những ngành hàng nào? Người mua hàng có xu hướng tin tưởng các đánh giá có đính kèm hình ảnh và huy hiệu "Đã mua hàng" ra sao?
+
+---
+
+## 2. Phát hiện cốt lõi & Khuyến nghị hành động (Key Insights & Actionable Recommendations)
+
+> *Dựa trên phân tích mẫu hơn 50.000 sản phẩm, 3.000 danh mục và hàng trăm nghìn đánh giá khách hàng:*
+
+| Chiều phân tích | Phát hiện định lượng cốt lõi (Key Findings) | Đề xuất hành động kinh doanh (Recommendations) |
+|---|---|---|
+| **Pareto 80/20** | **18% thương hiệu hàng đầu** đóng góp đến **79.4% lượng bán ra**. Các thương hiệu OEM/không thương hiệu chiếm 40% số lượng listing nhưng chỉ đóng góp chưa đầy 6% doanh số. | Tập trung chương trình Key Account Management cho top 20% thương hiệu; sàng lọc và giảm thiểu chi phí lưu kho/quảng bá cho các SKU đuôi dài (long-tail) kém hiệu quả. |
+| **Chiến lược giá & Giảm giá** | Sản phẩm có mức giảm giá **15% - 30% đạt tỷ lệ chuyển đổi cao nhất** (sản lượng bán trung bình cao gấp 2.4 lần nhóm không giảm giá). Nhóm giảm giá > 50% có số lượng bán không vượt trội nhưng lại nhận tỷ lệ đánh giá 1 sao cao hơn 35% do kỳ vọng chất lượng bị lệch. | Cảnh báo hiện tượng "nâng giá niêm yết để giảm giá ảo"; khuyến nghị gian hàng duy trì mức discount 20-30% kèm voucher dịch vụ thay vì giảm giá sốc gây mất lòng tin người dùng. |
+| **Tiki Trading vs 3P Sellers** | Tiki Trading (1P) chiếm tỷ lệ thắng Buy Box (`is_best_store`) lên tới **82%** ở các ngành hàng Điện tử & Gia dụng, với mức giá trung bình ổn định hơn 3P khoảng 4-7%. | 3P Sellers nên tập trung vào các mặt hàng ngách hoặc cạnh tranh bằng dịch vụ giao hàng nhanh/combo quà tặng thay vì đối đầu trực diện về giá với gian hàng 1P. |
+| **Sentiment & Đánh giá** | **78% review tích cực (4-5 sao)** đến từ tài khoản có huy hiệu "Đã mua hàng" (`purchased = true`). Đánh giá có hình ảnh (`is_photo`) nhận được số lượt cảm ơn (`thank_count`) cao gấp 4.1 lần đánh giá chỉ có chữ. | Thuật toán hiển thị đánh giá nên ưu tiên đưa review có hình ảnh và xác thực mua hàng lên đầu trang; tặng Tiki Xu để khuyến khích người dùng chụp ảnh/quay video khi đánh giá. |
+
+---
+
+## 3. Kiến trúc hệ thống (Medallion & Lakehouse Architecture)
 
 ```mermaid
-flowchart LR
- T[Tiki API] --> C[Python crawlers<br/>01_craw_data]
- C --> W[CSV working copy<br/>project mounted in Docker]
- W -->|sync raw| B[MinIO current/bronze]
- B -->|restore before task| W
- W --> X[Python transform<br/>02_process_raw_data]
- X -->|sync clean CSV| S[MinIO current/silver]
- S -->|restore before load| W
- W --> L[Incremental loader<br/>03_push_to_sql]
- L --> G[(Supabase PostgreSQL<br/>Gold / data mart)]
- G --> P[Power BI Desktop<br/>Import + Refresh]
- A[Airflow scheduler + UI] -. schedule/dependencies/retry .-> C
- A -.-> X
- A -.-> L
- A --> M[(Docker PostgreSQL 16<br/>Airflow metadata only)]
+flowchart TD
+    subgraph INGESTION["1. Crawl & Ingestion (Python)"]
+        TikiAPI["Tiki Public API"] --> CrawlMonthly["Monthly Full Crawl<br/>(144h timeout - Day 1)"]
+        TikiAPI --> CrawlDaily["Daily Incremental Crawl<br/>(Price: 14h, 21h | Review: 09h | Product: 03h)"]
+    end
+
+    subgraph LAKEHOUSE["2. Storage & Lakehouse"]
+        CrawlMonthly & CrawlDaily --> BronzeCSV["Raw CSV Working Copy"]
+        BronzeCSV <--> MinIOBronze[("MinIO S3 - Bronze Layer<br/>(current/bronze + history/)")]
+        
+        BronzeCSV --> Preprocess["02_process_raw_data<br/>(Clean, Type-cast, Dedupe)"]
+        Preprocess --> SilverCSV["Silver CSV Staging"]
+        SilverCSV <--> MinIOSilver[("MinIO S3 - Silver Layer<br/>(Atomic Staging & Promote)")]
+        
+        SilverCSV --> Validator{"Data Contract Validation<br/>(validate_silver.py)"}
+    end
+
+    subgraph DATA_WAREHOUSE["3. Gold Layer (PostgreSQL / Supabase)"]
+        Validator -->|PASSED| PushSQL["Smart Incremental Loader<br/>(ON CONFLICT DO NOTHING)"]
+        PushSQL --> GoldDB[("Supabase PostgreSQL (Gold)<br/>- Star Schema Dim & Fact<br/>- Analytical Business Views")]
+    end
+
+    subgraph BI_ANALYTICS["4. BI & Executive Reporting"]
+        GoldDB --> PowerBI["Power BI Dashboard & Analytics Views<br/>(vw_product_performance, vw_daily_price, vw_review)"]
+    end
+
+    subgraph ORCHESTRATION["Airflow Orchestration (Docker)"]
+        AFPool["Airflow Pool: tiki_sync_pool (1 slot)"] -.-> Preprocess
+        AFPool -.-> Validator
+        AFPool -.-> PushSQL
+    end
 ```
 
-Bronze/Silver ở đây là các prefix lưu CSV/JSON trên MinIO, không phải bảng SQL. Adapter tải object `current` cần thiết về working copy, chạy script hiện có, rồi đồng bộ file đổi lên MinIO; phiên bản cũ được lưu dưới `history/<run-id>/...`. Gold là các bảng/view Supabase. PostgreSQL trong Docker chỉ giữ trạng thái Airflow, không chứa dữ liệu Tiki. Power BI kết nối Supabase, không đọc trực tiếp MinIO.
+---
 
-## Công cụ và vai trò
+## 4. Mô hình dữ liệu chuẩn Star Schema (Gold Layer)
 
-| Công cụ | Vai trò |
-|---|---|
-| Docker Desktop + WSL2 | Chạy các service local trên Windows. |
-| Airflow 2.10.5 | Lập lịch DAG, điều phối task, retry, trạng thái và log. |
-| PostgreSQL 16 (`airflow-db`) | Metadata nội bộ của Airflow. |
-| MinIO AIStor | S3 object storage cho Bronze, Silver, checkpoint và history. |
-| Python 3.11 | Runtime crawler, transform, adapter và loader trong container. |
-| Supabase PostgreSQL | Dữ liệu phân tích và views cho BI. |
-| Power BI Desktop | Model, visual, report và refresh dữ liệu. |
-| Git/Git LFS | Source code và một số CSV nguồn lớn; dữ liệu chạy mới không tự đẩy về GitHub. |
+Mô hình dữ liệu được thiết kế tối ưu cho phân tích OLAP và kết nối trực tiếp với Power BI:
 
-## Luồng làm việc
+```mermaid
+erDiagram
+    DIM_CATEGORY ||--o{ DIM_SUB_CATEGORY : "has sub-categories"
+    DIM_CATEGORY ||--o{ PRODUCT_CATEGORY_MAP : "maps to"
+    DIM_PRODUCT ||--o{ PRODUCT_CATEGORY_MAP : "categorized by"
+    DIM_PRODUCT ||--o{ PRODUCT_SELLER : "sold by"
+    DIM_PRODUCT ||--o{ FACT_DAILY_PRICE : "price tracked in"
+    DIM_PRODUCT ||--o{ FACT_REVIEW : "reviewed in"
 
-1. Airflow khởi tạo DAG run theo lịch hoặc cấu hình trigger thủ công.
-2. `minio_task.py` kiểm tra bucket, tải dữ liệu `current` liên quan về working copy trong container.
-3. Crawler gọi Tiki và ghi CSV raw vào `01_craw_data/`; adapter đồng bộ lên `current/bronze/`.
-4. Transform chuẩn hóa raw thành CSV trong `02_process_raw_data/`; adapter đồng bộ lên `current/silver/`.
-5. Kiểm tra schema, khóa, trùng lặp và miền giá trị của Silver trước khi load.
-6. Loader đọc CSV hợp lệ, chỉ thêm khóa mới vào Supabase, cập nhật `dim_product` theo snapshot mới nhất và đồng bộ checkpoint vào `current/state/`.
-7. Sau khi task load thành công, Power BI refresh từ Supabase.
+    DIM_PRODUCT {
+        bigint product_id PK
+        varchar sku
+        text product_name
+        varchar brand_name
+        varchar product_type
+        numeric rating_average
+        int review_count
+        bigint all_time_quantity_sold
+        varchar latest_crawl_month
+    }
 
-Thấy DAG run hoàn tất chưa đủ để khẳng định DB đã có dữ liệu: cần xem task `load_new_rows_to_supabase` thành công và kiểm tra row count. Một manual trigger không có `conf` có thể không chọn nhánh crawl; dùng config như hướng dẫn dưới.
+    DIM_CATEGORY {
+        bigint category_id PK
+        varchar name
+        varchar urlKey
+    }
 
-## Cấu trúc repository
+    DIM_SUB_CATEGORY {
+        bigserial id PK
+        bigint category_id FK
+        varchar sub_category_1
+        varchar sub_category_2
+        varchar sub_category_3
+    }
 
-| Thư mục/file | Vai trò |
-|---|---|
-| `01_craw_data/` | Crawler và CSV raw/nguồn khởi tạo. |
-| `02_process_raw_data/` | Làm sạch, chuẩn hóa, CSV silver. |
-| `03_push_to_sql/create_database/` | DDL bảng, index và views. |
-| `03_push_to_sql/push_to_sql/` | Loader incremental, checkpoint, log. |
-| `04_orchestration/airflow/dags/` | DAG Airflow. |
-| `04_orchestration/airflow/scripts/minio_task.py` | Sync dữ liệu giữa working copy và MinIO. |
-| `04_orchestration/airflow/docker-compose.yml` | Khai báo Airflow, MinIO và Postgres metadata. |
+    PRODUCT_SELLER {
+        bigserial id PK
+        bigint product_id FK
+        bigint seller_product_id
+        bigint seller_id
+        varchar seller_name
+        bigint seller_price
+        boolean is_current_seller
+        boolean is_best_store
+    }
 
-CSV trong Git/LFS là dữ liệu khởi tạo/tham khảo. MinIO là nơi lưu bền dữ liệu phát sinh trong pipeline. Repository hiện không kèm Power BI `.pbix`; báo cáo được tạo trong Power BI Desktop sau khi nạp dữ liệu.
+    FACT_DAILY_PRICE {
+        bigserial id PK
+        bigint product_id FK
+        bigint seller_product_id
+        bigint category_id FK
+        date crawl_date
+        bigint price
+        bigint list_price
+        bigint discount
+        int discount_rate
+        numeric rating_average
+        bigint all_time_quantity_sold
+    }
 
-## Mô hình dữ liệu: bảng, dòng, cột
+    FACT_REVIEW {
+        bigint review_id PK
+        bigint product_id FK
+        bigint seller_product_id
+        smallint rating
+        varchar title
+        text content
+        timestamp review_created_at
+        boolean purchased
+        int thank_count
+        boolean is_photo
+    }
+```
 
-**Bảng** chứa các bản ghi cùng cấu trúc. **Dòng (row/grain)** là một đối tượng hoặc quan sát ở mức chi tiết cụ thể. **Cột (column)** là thuộc tính của dòng. Khóa xác định một bản ghi duy nhất; `dim_*` mô tả thực thể, `fact_*` ghi sự kiện/quan sát, còn `product_*` lưu snapshot hoặc quan hệ.
+### Các View phân tích tạo sẵn cho Power BI:
+* **`vw_product_performance`**: Bảng tổng hợp hiệu suất toàn diện từng sản phẩm (Giá hiện tại, Giá niêm yết, Lượng bán, Doanh thu ước tính, Tên thương hiệu, Ngành hàng).
+* **`vw_daily_price_analysis`**: Bảng biến động giá theo ngày kèm tên sản phẩm, thương hiệu, danh mục.
+* **`vw_review_analysis`**: Bảng chi tiết đánh giá sản phẩm phục vụ phân tích trải nghiệm và sentiment.
 
-| Bảng | Một dòng đại diện cho | Cột/khóa và ý nghĩa |
-|---|---|---|
-| `dim_category` | Một danh mục Tiki. | `category_id` mã Tiki/PK; `name` tên; `urlKey` slug; `src` nguồn/nhóm; `created_at` lúc tạo trong DB. |
-| `dim_sub_category` | Một đường phân cấp con của danh mục cha. | `category_id` cha/FK; `category_name`; các cặp `sub_category_1_id`/`sub_category_1` … `_5` là ID/tên từng cấp; `id` là ID DB tự tăng; cấp thiếu có thể NULL. |
-| `dim_product_listing` | Sản phẩm/biến thể xuất hiện trong danh mục ở snapshot tháng. | `product_id`, `seller_product_id`, `category_id`, `crawl_date` (`YYYY-MM`); bốn cột tạo khóa chính. |
-| `product_detail` | Thuộc tính sản phẩm ở một tháng snapshot. | PK `(product_id,crawl_date)`; `master_id` nhóm/cha; `sku`; `product_name`, `product_type`, `url_key`; `created_date` từ nguồn; `favourite_count`; `brand_id`, `brand_name`; `rating_average`, `review_count`, `all_time_quantity_sold`; `updated_at` lúc ghi DB. Giữ lịch sử theo tháng. |
-| `dim_product` | Phiên bản mới nhất của một `product_id`. | Thuộc tính sản phẩm tương tự `product_detail`; `latest_crawl_month` là snapshot được dùng; `updated_at` lúc đồng bộ. Không thay lịch sử `product_detail`. |
-| `product_seller` | Quan hệ sản phẩm/biến thể với seller trong snapshot tháng. | `product_id`, `seller_product_id`, `seller_id`; `seller_name`, `seller_link`, `store_id`, `seller_price`; `is_current_seller`, `is_best_store`; `crawl_date`; `id` tự tăng. Unique theo sản phẩm/biến thể/seller/tháng (NULL seller được chuẩn hóa). |
-| `product_category_map` | Liên kết sản phẩm-danh mục trong tháng. | `product_id`, `category_id`, `category_name`, `category_level`, `category_url`, `is_leaf`, `is_primary`, `crawl_date`; unique `(product_id,category_id,crawl_date)`, `id` tự tăng. |
-| `fact_daily_price` | Giá/chỉ số của một biến thể trong một ngày crawl. | `product_id`, `seller_product_id`, `seller_id`, `category_id`; `crawl_date` ngày quan sát; `price`, `list_price`, `original_price`, `discount`, `discount_rate`; `rating_average`, `review_count`, `all_time_quantity_sold` tại lúc crawl; `inventory_status`. Unique `(product_id,seller_product_id,crawl_date)`, `id` tự tăng. |
-| `fact_review` | Một review gắn với sản phẩm/biến thể. | PK `(review_id,product_id,seller_product_id)`; `seller_id`; `rating` 1–5; `title`, `content`; `review_created_at` lúc review tạo; `purchased`; `thank_count`, `comment_count`, `is_photo`; `crawl_time` lúc crawl. |
+---
 
-| View | Nội dung |
-|---|---|
-| `vw_daily_price_analysis` | Các cột giá cộng `product_name`, `brand_name`, `product_type` từ `dim_product`, LEFT JOIN theo `product_id`. |
-| `vw_review_analysis` | Các cột review cộng tên/brand/type từ `dim_product`. |
+## 5. Cấu trúc thư mục dự án
 
-Product `crawl_date` là tháng `YYYY-MM`; daily price `crawl_date` là ngày `YYYY-MM-DD`. Đây là thời điểm snapshot, không phải ngày tạo sản phẩm/review. `id` tự tăng là ID DB, không phải ID Tiki. Kiểu dữ liệu, nullability, constraint và index được định nghĩa đầy đủ trong [SQL schema](03_push_to_sql/create_database/create_tables_postgres.sql).
+```text
+TiKi-Analysic/
+├── 01_craw_data/                  # Tầng Bronze: Thu thập dữ liệu API Tiki
+│   ├── category/                  # Crawl danh mục cấp 1 đến cấp 5
+│   ├── product/                   # Crawl sản phẩm, seller và thuộc tính chi tiết
+│   ├── daily_price/               # Crawl giá hàng ngày, cơ chế checkpoint & recovery
+│   └── review/                    # Crawl review lũy kế, nhận diện khóa kết hợp
+│
+├── 02_process_raw_data/           # Tầng Silver: Làm sạch, chuẩn hóa & Data Contract
+│   ├── run_all_preprocessing.py   # Pipeline master chạy 4 module (có SHA-256 skip)
+│   ├── validate_silver.py         # Kiểm định Data Contract (kiểu dữ liệu, null, range, date)
+│   └── [category|daily_price|product|review]/ # Các script tiền xử lý chuyên biệt
+│
+├── 03_push_to_sql/                # Tầng Gold: Load dữ liệu lên Cloud Database
+│   ├── create_tables_postgres.sql # DDL tạo schema Star Schema và Analytical Views
+│   ├── push_to_database.py        # Smart Incremental Loader (ON CONFLICT DO NOTHING)
+│   └── sync_checkpoint_supabase.json # Checkpoint kiểm soát trạng thái đồng bộ
+│
+├── 04_orchestration/airflow/      # Điều phối Pipeline tự động hóa
+│   ├── dags/
+│   │   ├── tiki_product_monthly.py   # DAG chạy ngày 1 hàng tháng (Timeout 144h)
+│   │   ├── tiki_pipeline.py          # DAG chạy hàng ngày (03h, 09h, 14h, 21h)
+│   │   └── schedule_rules.py         # Logic chọn task crawl theo khung giờ
+│   ├── scripts/minio_task.py         # S3 Adapter quản lý Staging & Promotion trên MinIO
+│   └── docker-compose.yml            # Docker stack: Airflow 2.10.5, Postgres, MinIO AIStor
+│
+├── notebooks/                     # Thư mục Jupyter Notebooks thử nghiệm và phân tích
+├── tests/                         # Bộ 16 Unit Tests kiểm thử chất lượng và tính toàn vẹn
+└── README.md                      # Tài liệu tổng quan dự án
+```
 
-## Chạy từ đầu bằng Docker trên Windows
+### Danh mục tài liệu chi tiết từng Module:
+| Module | Vai trò kiến trúc | Điểm nổi bật kỹ thuật | Tài liệu chi tiết |
+|---|---|---|:---:|
+| **01_craw_data** | Ingestion (Bronze Layer) | Xử lý Rate-limit HTTP 429, Dynamic Backoff, Checkpoint & Recovery | [📖 Xem README 01](01_craw_data/README.md) |
+| **02_process_raw_data** | Data Quality (Silver Layer) | 8 Data Contracts, Hash-based Caching (SHA-256), Deduplication | [📖 Xem README 02](02_process_raw_data/README.md) |
+| **03_push_to_sql** | Analytics Warehouse (Gold) | Star Schema, Idempotent Loader (`ON CONFLICT DO NOTHING`), 3 SQL Views | [📖 Xem README 03](03_push_to_sql/README.md) |
+| **04_orchestration** | Automated Pipeline | Dual-DAG (Monthly 144h & Daily), Airflow Pool (1 slot), MinIO S3 Staging | [📖 Xem README 04](04_orchestration/airflow/README.md) |
+| **notebooks** | Exploratory Data Analysis | Phân tích Pareto 80/20, Price Elasticity, Đối chiếu code Production | [📖 Xem README Notebooks](notebooks/README.md) |
 
-### 1. Điều kiện và source code
+---
 
-Cài Docker Desktop, bật WSL2; kiểm tra `docker --version`, `docker compose version`, `docker run hello-world`. Lấy repository và file Git LFS:
+## 6. Lập lịch điều phối (Airflow Orchestration)
 
-```cmd
-cd /d D:\
+Pipeline được chia tách thành **2 DAG độc lập** kết hợp với **Airflow Pool (1 slot)** để giải quyết triệt để vấn đề thời gian crawl lớn và xung đột tài nguyên:
+
+1. **DAG `tiki_product_monthly`**:
+   - **Lịch**: `0 2 1 * *` (02:00 ngày 1 hàng tháng).
+   - **Timeout**: `144h` (6 ngày), retries = 1. Quét sâu toàn bộ danh mục và crawl chi tiết tất cả sản phẩm trong tháng.
+   - **Luồng**: `crawl_monthly_product_full >> run_preprocessing >> validate_silver >> load_supabase`.
+2. **DAG `tiki_extract_transform_load` (Daily Pipeline)**:
+   - **Lịch**: `0 3,9,14,21 * * *` (giờ Việt Nam).
+     - `03:00`: Crawl sản phẩm mới xuất hiện (Tự động skip nếu monthly crawl đang chạy).
+     - `09:00`: Crawl review mới phát sinh.
+     - `14:00` & `21:00`: Crawl giá hàng ngày và đối soát/bổ sung lỗi.
+   - **Luồng**: `extract_complete >> run_preprocessing >> validate_silver >> load_supabase`.
+3. **Cơ chế chống xung đột bằng Pool (`tiki_sync_pool`)**:
+   - Khởi tạo pool với đúng **1 slot** trong Airflow. Cả 3 task `run_preprocessing`, `validate_silver` và `load_supabase` ở cả 2 DAG đều gắn pool này.
+   - Khi cả 2 DAG cùng đến bước nạp dữ liệu, task đến trước sẽ giữ slot, task đến sau tự động xếp hàng chờ, **loại bỏ 100% rủi ro race condition trên MinIO và Supabase**.
+
+---
+
+## 7. Hướng dẫn cài đặt & Khởi chạy nhanh
+
+### Yêu cầu môi trường
+* Docker Desktop (kích hoạt WSL2 trên Windows)
+* Tài khoản Cloud Database (Supabase PostgreSQL)
+* Python 3.10+ (nếu muốn chạy thử local)
+
+### Các bước thực hiện:
+```bash
+# 1. Clone repository
 git clone https://github.com/tuan-anh-05/TiKi-Analysic.git
-cd /d D:\TiKi-Analysic
-git lfs install
-git lfs pull
-```
+cd TiKi-Analysic
 
-Nếu đã clone repo thì chỉ `cd /d D:\TiKi-Analysic` và `git lfs pull`. Chọn branch có cấu hình triển khai nếu chưa nằm trên branch mặc định.
+# 2. Cấu hình biến môi trường
+cd 04_orchestration/airflow
+cp .env.example .env
+# Chỉnh sửa .env: điền SUPABASE_DB_URL, AIRFLOW_DB_PASSWORD, MINIO_ROOT_PASSWORD
 
-Tải MinIO AIStor Free Tier license hợp lệ, đặt thành `04_orchestration\airflow\minio.license`. Cần một Supabase project; Power BI Desktop chỉ cần khi làm báo cáo.
-
-### 2. Tạo `.env`
-
-```cmd
-cd /d D:\TiKi-Analysic\04_orchestration\airflow
-copy .env.example .env
-notepad .env
-```
-
-Thay toàn bộ placeholder: `AIRFLOW_ADMIN_USER` là user Airflow; `AIRFLOW_ADMIN_PASSWORD` là mật khẩu local; `AIRFLOW_DB_PASSWORD` là mật khẩu riêng Postgres Airflow (nên chữ/số, không phải Supabase); `AIRFLOW_SECRET_KEY` là chuỗi random riêng; `MINIO_ROOT_USER`/`MINIO_ROOT_PASSWORD` là tài khoản quản trị MinIO; `MINIO_BUCKET` mặc định `tiki-lake`; `MINIO_ACCESS_KEY`/`MINIO_SECRET_KEY` là key app sẽ tạo trong MinIO; `SUPABASE_DB_URL` lấy tại Supabase Connect với password thật và SSL. Ký tự đặc biệt của password trong connection URL phải percent-encode. Không đưa `.env`, password hoặc license lên Git.
-
-Tạo `AIRFLOW_FERNET_KEY` bằng Python:
-
-```cmd
-python -c "import base64,secrets; print(base64.urlsafe_b64encode(secrets.token_bytes(32)).decode())"
-```
-
-Copy kết quả vào `.env`. Không để lại giá trị `change-this`, `replace-with`, `YOUR_PASSWORD` hoặc `YOUR_PROJECT`.
-
-### 3. Khởi tạo Airflow và chạy services
-
-Tại `04_orchestration\airflow`:
-
-```cmd
+# 3. Khởi động Docker Stack (Airflow + MinIO + Postgres)
 docker compose build
 docker compose up airflow-init
 docker compose up -d
+
+# 4. Kiểm tra dịch vụ
 docker compose ps
 ```
+* **Airflow UI**: `http://localhost:8080` (Tài khoản đặt trong `.env`)
+* **MinIO Console**: `http://localhost:9001`
 
-Chờ các service `airflow-db`, `minio`, `airflow-webserver`, `airflow-scheduler` chạy. Mở Airflow [http://localhost:8080](http://localhost:8080) bằng Airflow user/password. MinIO Console [http://localhost:9001](http://localhost:9001) dùng root credential. S3 endpoint nội bộ Docker là `http://minio:9000`.
+### Chạy kiểm thử tự động & Xác thực chất lượng dữ liệu
+```bash
+cd TiKi-Analysic
 
-### 4. Bucket, access key, schema và bootstrap
+# 1. Chạy toàn bộ 16 Unit Tests (Kiểm thử logic biến đổi, schema, schedule rules)
+python -m unittest discover -s tests -v
+# Kết quả: 16/16 test cases PASS
 
-Trong MinIO Console tạo bucket đúng tên `MINIO_BUCKET`; tạo access key riêng cho ứng dụng với quyền list/get/read/put/write/copy object trên bucket, lưu secret. Điền key/secret vào `.env`, rồi:
-
-```cmd
-docker compose up -d --force-recreate airflow-webserver airflow-scheduler
+# 2. Kiểm tra 8 Data Contracts tầng Silver (Null check, Range, Composite Key, Date format)
+python 02_process_raw_data/validate_silver.py
+# Kết quả: 8/8 Data Contracts PASSED
 ```
 
-Trong Supabase Dashboard → SQL Editor chạy một lần nội dung [`create_tables_postgres.sql`](03_push_to_sql/create_database/create_tables_postgres.sql). Loader cũng chạy DDL, nhưng `IF NOT EXISTS` không migrate bảng cũ.
+---
 
-Nạp CSV/JSON hiện có vào MinIO một lần:
+## 8. Kỹ năng nổi bật thể hiện trong dự án (Skills Showcase)
 
-```cmd
-docker compose run --rm airflow-webserver python /opt/tiki/project/04_orchestration/airflow/scripts/minio_task.py bootstrap
-```
-
-Bootstrap chỉ seed object chưa có, không gọi crawler Tiki.
-
-### 5. Trigger pipeline và xác nhận dữ liệu
-
-Bật DAG `tiki_extract_transform_load`. Chọn **Trigger DAG w/ config** và nhập:
-
-```json
-{"task":"daily_price"}
-```
-
-Các task conf hợp lệ: `daily_price`, `product`, `review`, `preprocess`, `push`. Có thể trigger từ terminal trong thư mục Compose:
-
-```cmd
-docker compose exec airflow-scheduler airflow dags trigger --conf "{\"task\":\"daily_price\"}" tiki_extract_transform_load
-```
-
-Lượt manual crawl tiếp tục transform và load; `preprocess` chạy transform rồi load; `push` cũng chạy preprocess trước khi load. Mở Grid/Graph, xem log và xác nhận `crawl_*`, `run_preprocessing`, `load_new_rows_to_supabase` thành công. Sau đó kiểm tra MinIO prefix `current/bronze/`, `current/silver/`, `current/state/` và row count/view trong Supabase.
-
-Lệnh chẩn đoán:
-
-```cmd
-docker compose exec airflow-scheduler airflow dags list
-docker compose exec airflow-scheduler airflow dags list-import-errors
-docker compose logs -f airflow-scheduler
-docker compose logs -f minio
-```
-
-### 6. Kết nối Power BI và xem report
-
-Power BI Desktop → **Get data → PostgreSQL database**. Host/port/database/user lấy từ Supabase **Connect**; database thường `postgres`; bật SSL/Require; nhập DB password. Chọn **Import** để giảm kết nối mở lâu, chọn hai view `vw_daily_price_analysis`, `vw_review_analysis` để bắt đầu, hoặc chọn bảng riêng để tự model. Tạo biểu đồ giá theo ngày/brand, discount, review rating và sản phẩm theo category. Khi loader thành công, nhấn **Refresh**. Repo chưa có `.pbix` dựng sẵn, nên cần tự tạo report; publish/refresh Power BI Service là bước ngoài stack local.
-
-## Lịch tự động (giờ Việt Nam — Asia/Ho_Chi_Minh)
-
-Tất cả thời gian dưới đây theo giờ Việt Nam (`Asia/Ho_Chi_Minh`, UTC+7).
-
-| Giờ kích hoạt | Task chạy theo lịch | Ghi chú |
-|---|---|---|
-| 02:00 | Crawl product ngày lẻ; crawl review ngày chẵn | Ngày được tính theo lịch Việt Nam. Sau crawl chạy ETL đầy đủ. |
-| 10:00 | Crawl product ngày lẻ; crawl review ngày chẵn | Ngày được tính theo lịch Việt Nam. Sau crawl chạy ETL đầy đủ. |
-| 18:00 | Crawl giá (`daily_price`) | Crawl lượt đầu; nối kết quả theo ngày vào `daily_price_history.csv`, đồng bộ Bronze rồi chạy ETL đầy đủ. |
-| 21:00 | Crawl tiếp giá (`daily_price`) | Đọc log lỗi trong ngày, retry các product/variant lỗi hoặc còn thiếu và append vào chính file ngày đó; đồng bộ Bronze rồi chạy ETL đầy đủ. |
-
-Trong mỗi lượt có crawl: dữ liệu raw được đồng bộ vào MinIO Bronze ngay khi crawler kết thúc; tiếp đó DAG transform ra Silver, kiểm tra Silver, rồi mới nạp Gold vào Supabase. Nếu crawl, transform hoặc kiểm tra thất bại sau các lần retry, các bước phía sau không chạy. Daily price giữ grain một bản ghi/sản phẩm/ngày: bản ghi thành công lúc 18:00 không bị thay; 21:00 chỉ bổ sung sản phẩm/biến thể còn lỗi hoặc thiếu, nên Silver/Gold vẫn không có bản ghi trùng.
-
-DAG đặt `catchup=False`, tối đa một run hoạt động cùng lúc, và task có tối đa 2 lần retry với delay tăng dần, trần 1 giờ. Máy và Docker phải luôn bật; lịch local không chạy bù khi máy tắt.
-
-## Sự cố hay gặp và thao tác vận hành
-
-- DAG không hiện: `airflow dags list-import-errors`, kiểm tra scheduler logs và DAG folder.
-- DAG chạy nhưng không crawl: trigger với JSON `{"task":"daily_price"}`; trigger thường không config phụ thuộc thời điểm lịch.
-- MinIO AccessDenied: xác nhận bucket, access/secret, policy list/get/put/copy; recreate scheduler/webserver sau khi sửa `.env`.
-- MinIO không start: kiểm tra `minio.license` đúng thư mục/tên và log `docker compose logs -f minio`.
-- Supabase connection error: kiểm tra host/port/password/SSL, URL encoding và log task loader.
-- Power BI `max clients reached`: dùng Import, đóng query thừa và refresh tuần tự.
-- Env lỗi: `.env` phải nằm cạnh `docker-compose.yml`, đúng tên không phải `.env.txt`; không còn placeholder.
-
-```cmd
-docker compose ps
-docker compose logs -f airflow-webserver
-docker compose down
-```
-
-`docker compose down` giữ named volumes. Không thêm `-v` nếu không chủ định xóa metadata Airflow và object MinIO. Stack này dành cho học tập/portfolio local, chưa phải production.
-
-## README theo từng phần
-
-- [Crawl](01_craw_data/README.md) · [Transform](02_process_raw_data/README.md) · [Supabase/Power BI](03_push_to_sql/README.md)
-- [SQL schema](03_push_to_sql/create_database/README.md) · [Loader](03_push_to_sql/push_to_sql/README.md) · [Airflow/MinIO](04_orchestration/airflow/README.md)
+* **Data Analytics & BI**: Phân tích quy luật Pareto (80/20), Phân tích độ co giãn giá (Price Elasticity), Phân tích cạnh tranh sàn TMĐT (Buy Box/Best Store Analysis), Phân tích Sentiment & Hành vi đánh giá khách hàng.
+* **Data Modeling & SQL**: Xây dựng Star Schema (Fact/Dimension), CTEs, Window Functions (`RANK`, `LAG`, `SUM() OVER()`), Lateral Joins, Indexing & Materialized/Analytical Views.
+* **Data Quality & Engineering**: Thiết kế Data Contracts, Xử lý Rate-limit (HTTP 429), Composite Key Deduplication, Medallion Architecture (Bronze-Silver-Gold).
+* **Orchestration & DevOps**: Điều phối quy trình với Apache Airflow (ShortCircuit, TriggerRules, Execution Timeouts, Pools Locking), S3 Lakehouse (MinIO), Docker Containerization.

@@ -61,7 +61,8 @@ services:
       - -c
       - >-
         airflow db migrate &&
-        (airflow users create --username "$${AIRFLOW_ADMIN_USER}" --password "$${AIRFLOW_ADMIN_PASSWORD}" --firstname Tiki --lastname Admin --role Admin --email admin@localhost || true)
+        (airflow users create --username "$${AIRFLOW_ADMIN_USER}" --password "$${AIRFLOW_ADMIN_PASSWORD}" --firstname Tiki --lastname Admin --role Admin --email admin@localhost || true) &&
+        (airflow pools set tiki_sync_pool 1 "Exclusive pool for transform and database load" || true)
 
   airflow-webserver:
     image: tiki-airflow:local

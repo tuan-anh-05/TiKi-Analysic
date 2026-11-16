@@ -1,6 +1,7 @@
 """
 Crawl dữ liệu giá hằng ngày từ Tiki.
 Được chuyển từ notebook: crawl_daily_price.ipynb
+Chạy tối đa MAX_STAGES lượt (1 lượt chính + các lượt thử lại ID lỗi).
 """
 
 # %% Cell 1
@@ -13,8 +14,10 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import pandas as pd
 import threading
 import requests
+import random
 import time
 from zoneinfo import ZoneInfo
+from recovery import load_completed_keys, load_failed_targets, pending_rows, validate_run_date
 
 PROJECT_DIR = Path.cwd().resolve()
 if not (PROJECT_DIR / "01_craw_data").is_dir():
@@ -31,20 +34,20 @@ INPUT_FILE = PRICE_DIR / "product_pareto.csv"
 SAVE_FILE = PRICE_DIR / "daily_price_history.csv"
 LOG_FILE = PRICE_DIR / "crawl_daily_log.csv"
 
-PRICE_DIR.mkdir(parents=True, exist_ok=True)
-
 
 # %% Cell 2
 # ==================================================
 # 1. CẤU HÌNH
 # ==================================================
 MAX_WORKERS = 4
-MAX_RETRIES = 3
+MAX_RETRIES = 2
 SAVE_EVERY = 30
 BATCH_SIZE = 120
 TIMEOUT = 20
+REQUEST_DELAY = (0.5, 1.5)
 
-GONE_FILE = SAVE_FILE.with_name("deleted_products.csv")  # sản phẩm 404/410
+MAX_STAGES = 5          # tổng số lượt crawl (1 lượt chính + 4 lượt thử lại)
+RETRY_SLEEP = 5         # giây nghỉ cơ bản giữa các lượt (nhân theo số lượt)
 
 COLUMNS = [
     "product_id", "seller_product_id", "seller_id",
@@ -82,10 +85,13 @@ for col in ["product_id", "seller_product_id", "category_id"]:
         df[col] = df[col].str.replace("\ufeff", "", regex=False).str.strip()
 
 # ==================================================
-# 3. BỎ QUA SẢN PHẨM ĐÃ CRAWL HÔM NAY VÀ SẢN PHẨM ĐÃ BỊ XÓA
+# 3. BỎ QUA SẢN PHẨM ĐÃ CRAWL HÔM NAY
 # ==================================================
-today = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")).strftime("%Y-%m-%d")
-LOG_COLUMNS = ["log_time", "product_id", "seller_product_id", "error"]
+today = validate_run_date(
+    os.environ.get("TIKI_RUN_DATE"),
+    datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")).strftime("%Y-%m-%d"),
+)
+LOG_COLUMNS = ["log_time", "crawl_date", "product_id", "seller_product_id", "error"]
 
 if LOG_FILE.exists() and LOG_FILE.stat().st_size > 0:
     try:
@@ -115,83 +121,16 @@ elif not LOG_FILE.exists():
         LOG_FILE, index=False, encoding="utf-8-sig"
     )
 
-done = set()
-if SAVE_FILE.exists() and SAVE_FILE.stat().st_size > 0:
-    old = pd.read_csv(
-        SAVE_FILE,
-        dtype={
-            "product_id": "string",
-            "seller_product_id": "string",
-            "crawl_date": "string"
-        },
-        usecols=lambda c: c in {"product_id", "seller_product_id", "crawl_date"}
-    )
-    if {"product_id", "seller_product_id", "crawl_date"}.issubset(old.columns):
-        for col in ["product_id", "seller_product_id", "crawl_date"]:
-            old[col] = old[col].str.replace("\ufeff", "", regex=False).str.strip()
-        old_today = old.loc[old["crawl_date"].str[:10] == today]
-        done = set(zip(old_today["product_id"], old_today["seller_product_id"]))
-
-# Lấy các biến thể lỗi từ log hôm nay để lượt 21:00 retry phần crawl 18:00
-# chưa lấy được. Các key chưa có trong file kết quả cũng được đưa vào để có
-# thể phục hồi nếu tiến trình trước bị dừng trước lúc kịp ghi log.
-failed_keys = set()
-failed_product_ids = set()
-if LOG_FILE.exists() and LOG_FILE.stat().st_size > 0:
-    logs = pd.read_csv(LOG_FILE, encoding="utf-8-sig", low_memory=False)
-    if {"log_time", "error"}.issubset(logs.columns):
-        logs["log_time"] = pd.to_datetime(logs["log_time"], errors="coerce")
-        logs_today = logs.loc[logs["log_time"].dt.strftime("%Y-%m-%d") == today]
-        if "product_id" in logs_today.columns:
-            pids = logs_today["product_id"].dropna().astype("string").str.strip()
-            pids = pids.str.replace(r"\.0$", "", regex=True)
-            failed_product_ids.update(pids[pids.ne("")].tolist())
-        # Log đời cũ không có product_id riêng, chỉ ghi "<id>: <lỗi>".
-        legacy_pids = logs_today["error"].astype("string").str.extract(
-            r"^\s*(\d+)\s*:", expand=False
-        )
-        failed_product_ids.update(legacy_pids.dropna().tolist())
-        if "seller_product_id" in logs_today.columns:
-            for row in logs_today.dropna(
-                subset=["product_id", "seller_product_id"]
-            ).itertuples(index=False):
-                pid = str(row.product_id).strip()
-                spid = str(row.seller_product_id).strip()
-                pid = pid.removesuffix(".0")
-                spid = spid.removesuffix(".0")
-                if pid and spid:
-                    failed_keys.add((pid, spid))
-
-gone_ids = set()
-if GONE_FILE.exists() and GONE_FILE.stat().st_size > 0:
-    gone_history = pd.read_csv(
-        GONE_FILE, dtype={"product_id": "string", "log_time": "string"}, low_memory=False
-    )
-    if {"product_id", "log_time"}.issubset(gone_history.columns):
-        gone_history["log_time"] = pd.to_datetime(gone_history["log_time"], errors="coerce")
-        retry_after = pd.Timestamp.now() - pd.Timedelta(days=30)
-        recent_gone = gone_history.loc[gone_history["log_time"] >= retry_after]
-        gone_ids = set(
-            recent_gone["product_id"].dropna().astype("string")
-            .str.replace("\ufeff", "", regex=False).str.strip()
-        )
+done = load_completed_keys(SAVE_FILE, today)
+failed_keys, failed_product_ids = load_failed_targets(LOG_FILE, today)
+pending = pending_rows(
+    df.to_dict("records"), done, failed_keys, failed_product_ids
+)
+df = pd.DataFrame(pending, columns=df.columns)
 
 if done:
     key = pd.MultiIndex.from_frame(df[["product_id", "seller_product_id"]])
     df = df.loc[~key.isin(done)]
-
-if failed_keys or failed_product_ids:
-    key = pd.MultiIndex.from_frame(df[["product_id", "seller_product_id"]])
-    retry_mask = key.isin(failed_keys)
-    if failed_product_ids:
-        retry_mask |= df["product_id"].isin(failed_product_ids).to_numpy()
-    # Nếu log có lỗi hôm nay, lượt tiếp chỉ lấy đúng những biến thể lỗi đó.
-    # Nếu không có log lỗi, giữ các key còn thiếu để phục hồi run bị ngắt đột ngột.
-    if retry_mask.any():
-        df = df.loc[retry_mask]
-
-if gone_ids:
-    df = df.loc[~df["product_id"].isin(gone_ids)]
 
 df = df.reset_index(drop=True)
 total = len(df)
@@ -199,8 +138,8 @@ total = len(df)
 print("Input:", INPUT_FILE)
 print("Output:", SAVE_FILE)
 print("Ngày crawl:", today)
-print("Đã bỏ qua (đã bị xóa từ trước):", len(gone_ids))
-print("Sản phẩm lỗi đọc từ log hôm nay:", len(failed_product_ids | {pid for pid, _ in failed_keys}))
+print("ID lỗi đọc từ log hôm nay:", len(failed_product_ids))
+print("Key thành công đã có trong file:", len(done))
 print("Số sản phẩm cần crawl:", total)
 
 # ==================================================
@@ -235,6 +174,7 @@ def crawl_product(row):
     }
 
     for attempt in range(1, MAX_RETRIES + 1):
+        time.sleep(random.uniform(*REQUEST_DELAY))
         try:
             response = get_session().get(
                 url, params=params, headers=headers, timeout=TIMEOUT
@@ -291,9 +231,9 @@ def crawl_product(row):
                 "rating_average": data.get("rating_average"),
                 "review_count": data.get("review_count"),
                 "all_time_quantity_sold": data.get("all_time_quantity_sold"),
-                "inventory_status": data.get("inventory_status") 
+                "inventory_status": data.get("inventory_status")
             }
-            return record, None, False 
+            return record, None, False
 
         except Exception as e:
             if attempt == MAX_RETRIES:
@@ -323,14 +263,10 @@ def save_errors(errors):
         append_csv(LOG_FILE, errors, LOG_COLUMNS)
         errors.clear()
 
-def save_gone(gone):
-    if gone:
-        append_csv(GONE_FILE, gone, ["product_id", "seller_product_id", "log_time"])
-        gone.clear()
-
 # ==================================================
 # 7. CRAWL THEO BATCH
-# stage=1: crawl chính; stage=2: thử lại các sản phẩm lỗi ở lượt 1
+# stage < MAX_STAGES: lỗi chưa ghi log, để lượt sau thử lại
+# stage == MAX_STAGES: lượt cuối, ghi log các sản phẩm vẫn lỗi
 # ==================================================
 def crawl_rows(rows, stage):
     if not rows:
@@ -345,7 +281,7 @@ def crawl_rows(rows, stage):
             batch = rows[start:start + BATCH_SIZE]
             future_to_row = {executor.submit(crawl_product, r): r for r in batch}
 
-            results, errors, gone = [], [], []
+            results, errors = [], []
 
             for future in as_completed(future_to_row):
                 row = future_to_row[future]
@@ -363,18 +299,15 @@ def crawl_rows(rows, stage):
                     results.append(record)
                     success += 1
                 elif is_gone:
+                    # 404/410: chỉ đếm, không thử lại và không lưu file
                     gone_count += 1
-                    gone.append({
-                        "product_id": row["product_id"],
-                        "seller_product_id": row["seller_product_id"],
-                        "log_time": now_str
-                    })
                 else:
                     failed_rows.append(row)
-                    # chỉ ghi log khi vẫn lỗi sau lượt thử lại cuối
-                    if stage == 2:
+                    # chỉ ghi log khi vẫn lỗi sau lượt cuối cùng
+                    if stage == MAX_STAGES:
                         errors.append({
                             "log_time": now_str,
+                            "crawl_date": today,
                             "product_id": str(row["product_id"]),
                             "seller_product_id": str(row["seller_product_id"]),
                             "error": error or f"{row['product_id']}: Lỗi không xác định"
@@ -383,10 +316,9 @@ def crawl_rows(rows, stage):
                 if len(results) >= SAVE_EVERY:
                     save_records(results)
 
-            # Cuối batch: lưu mọi thứ còn lại (log lỗi được ghi ngay, không chờ hết lượt 2)
+            # Cuối batch: lưu mọi thứ còn lại
             save_records(results)
             save_errors(errors)
-            save_gone(gone)
 
             print(
                 f"Lượt {stage}: {completed}/{total_rows} "
@@ -399,42 +331,39 @@ def crawl_rows(rows, stage):
     return failed_rows, success, gone_count
 
 # ==================================================
-# 8. LƯỢT 1: CRAWL CHÍNH
+# 8. CHẠY NHIỀU LƯỢT (tối đa MAX_STAGES)
 # ==================================================
-print("\n========== LƯỢT 1: CRAWL CHÍNH ==========")
+rows_to_crawl = [row for _, row in df.iterrows()]
+stage_stats = []   # (lượt, thành công, đã xóa, còn lỗi)
 
-main_rows = [row for _, row in df.iterrows()]
-failed_rows, success_1, gone_1 = crawl_rows(main_rows, stage=1)
+for stage in range(1, MAX_STAGES + 1):
+    if not rows_to_crawl:
+        print(f"\nKhông còn sản phẩm lỗi, dừng ở lượt {stage - 1}.")
+        break
 
-print("\nKết thúc crawl chính.")
-print("Thành công lượt 1:", success_1)
-print("Sản phẩm đã bị xóa:", gone_1)
-print("Sản phẩm cần thử lại:", len(failed_rows))
+    if stage == 1:
+        print("\n========== LƯỢT 1: CRAWL CHÍNH ==========")
+    else:
+        print(
+            f"\n========== LƯỢT {stage}/{MAX_STAGES}: "
+            f"THỬ LẠI {len(rows_to_crawl)} ID LỖI =========="
+        )
+        time.sleep(RETRY_SLEEP * (stage - 1))   # nghỉ lâu dần để tránh bị chặn 429
 
-# ==================================================
-# 9. LƯỢT 2: THỬ LẠI ID LỖI
-# ==================================================
-success_2 = gone_2 = 0
-still_failed = []
+    rows_to_crawl, ok, gone_n = crawl_rows(rows_to_crawl, stage=stage)
+    stage_stats.append((stage, ok, gone_n, len(rows_to_crawl)))
 
-if failed_rows:
-    print("\n========== LƯỢT 2: THỬ LẠI ID LỖI ==========")
-    time.sleep(5)
-    still_failed, success_2, gone_2 = crawl_rows(failed_rows, stage=2)
-    print("\nKết thúc lượt thử lại.")
-else:
-    print("\nKhông có sản phẩm lỗi cần thử lại.")
+still_failed = rows_to_crawl
 
 # ==================================================
-# 10. KẾT QUẢ
+# 9. KẾT QUẢ
 # ==================================================
 print("\n========== HOÀN TẤT ==========")
 print("Tổng sản phẩm cần crawl:", total)
-print("Thành công lượt 1:", success_1)
-print("Thành công lượt 2:", success_2)
-print("Tổng thành công:", success_1 + success_2)
-print("Sản phẩm đã bị xóa (404/410):", gone_1 + gone_2)
+for stage, ok, gone_n, remain in stage_stats:
+    print(f"Lượt {stage}: thành công {ok} | đã xóa {gone_n} | còn lỗi {remain}")
+print("Tổng thành công:", sum(s[1] for s in stage_stats))
+print("Sản phẩm đã bị xóa (404/410):", sum(s[2] for s in stage_stats))
 print("Số sản phẩm vẫn lỗi:", len(still_failed))
 print("File giá:", SAVE_FILE.resolve())
 print("File log:", LOG_FILE.resolve())
-print("File sản phẩm đã xóa:", GONE_FILE.resolve())

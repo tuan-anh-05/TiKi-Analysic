@@ -48,22 +48,30 @@ def clean_daily_price_history(input_file: Path, output_file: Path) -> pd.DataFra
     print(df["crawl_date"].value_counts(dropna=False).sort_index())
     print(f"Số dòng sau lọc: {len(df):,}")
 
-    # 3. Chuẩn hóa giá và giảm giá
-    price_cols = ["price", "list_price", "original_price"]
-    for col in price_cols:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0).astype("int64")
+    # 3. Chuẩn hóa giá và giảm giá (loại bỏ giá rỗng/không hợp lệ <= 0)
+    df["price"] = pd.to_numeric(df["price"], errors="coerce")
+    df = df.dropna(subset=["price"])
+    df = df[df["price"] > 0]
+    df["price"] = df["price"].astype("int64")
 
-    # Kiểm tra & chuẩn hóa discount: discount = list_price - price (nếu hợp lý)
-    if "discount" in df.columns:
-        df["discount"] = pd.to_numeric(df["discount"], errors="coerce").fillna(0).astype("int64")
-    else:
-        df["discount"] = (df["list_price"] - df["price"]).clip(lower=0)
+    # list_price & original_price: fallback về giá bán nếu thiếu hoặc <= 0
+    for col in ["list_price", "original_price"]:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(df["price"])
+            df.loc[df[col] <= 0, col] = df["price"]
+            df[col] = df[col].astype("int64")
+
+    # discount: list_price - price (không âm)
+    df["discount"] = (df["list_price"] - df["price"]).clip(lower=0).astype("int64")
 
     # discount_rate: [0, 100]
     if "discount_rate" in df.columns:
-        df["discount_rate"] = pd.to_numeric(df["discount_rate"], errors="coerce").fillna(0).astype("int64")
-        df["discount_rate"] = df["discount_rate"].clip(lower=0, upper=100)
+        df["discount_rate"] = pd.to_numeric(df["discount_rate"], errors="coerce")
+        # Tính lại nếu thiếu hoặc sai lệch
+        calc_rate = ((df["discount"] / df["list_price"].replace(0, pd.NA)) * 100).fillna(0).round()
+        df["discount_rate"] = df["discount_rate"].fillna(calc_rate).clip(lower=0, upper=100).astype("int64")
+    else:
+        df["discount_rate"] = ((df["discount"] / df["list_price"].replace(0, pd.NA)) * 100).fillna(0).clip(lower=0, upper=100).round().astype("int64")
 
     # 4. Chuẩn hóa chỉ số đánh giá & bán hàng
     df["rating_average"] = pd.to_numeric(df["rating_average"], errors="coerce").fillna(0.0).round(2)

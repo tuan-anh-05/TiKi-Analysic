@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import os
 import random
+import sys
 import time
 from datetime import datetime
 from pathlib import Path
@@ -18,7 +19,7 @@ PAGE_LIMIT = 20
 SORT_MODE = "id|desc"
 REQUEST_DELAY = (0.5, 1.2)
 SAVE_EVERY_N = 20
-MAX_RETRIES = 3
+MAX_RETRIES = 2
 TIMEOUT = 20
 REVIEW_KEY_COLS = ["review_id", "product_id", "seller_product_id"]
 BAD_KEY_VALUES = {"", "nan", "none", "<na>", "null"}
@@ -85,13 +86,14 @@ def load_products_to_crawl(detail_file: Path, seller_file: Path, review_file: Pa
     )
     detail["product_id"] = detail["product_id"].map(normalize_key_value)
     detail["review_count"] = pd.to_numeric(detail["review_count"], errors="coerce").fillna(0).astype(int)
-    detail["crawl_date"] = detail["crawl_date"].astype(str).str.strip().str[:7]
+    detail["crawl_date"] = detail["crawl_date"].astype(str).str.strip()
+    detail["_crawl_sort"] = pd.to_datetime(detail["crawl_date"], errors="coerce")
 
-    latest = (
-        detail.sort_values("crawl_date")
-        .drop_duplicates("product_id", keep="last")
-        .rename(columns={"review_count": "review_count_current"})
-    )
+    latest = (detail.sort_values("_crawl_sort", kind="stable")
+                    .drop_duplicates("product_id", keep="last")
+                    .drop(columns=["_crawl_sort"])
+                    .rename(columns={"review_count": "review_count_current"})
+            )
 
     saved_counts = pd.Series(dtype="int64")
     if review_file.exists() and review_file.stat().st_size > 0:
@@ -309,6 +311,8 @@ def crawl_reviews(project_dir: Path, limit: int | None = None) -> None:
     print(f"Review mới đã nối: {saved_count:,}")
     print(f"Sản phẩm lỗi: {len(failed):,}")
     print(f"File: {review_file}")
+    if stopped:
+        sys.exit(1)
 
 
 def main() -> None:

@@ -1,40 +1,81 @@
-# Làm sạch và chuẩn hóa (Transform / Silver)
+# Tầng Tiền Xử Lý & Làm Sạch Dữ Liệu (Silver / Transform Layer)
 
-Các script ở đây đọc CSV raw trong `01_craw_data/`, chuẩn hóa dữ liệu cho phân tích và ghi CSV đã xử lý. Qua Airflow, adapter MinIO tải raw cần thiết về working copy, chạy transform, rồi đồng bộ kết quả lên prefix `current/silver/`. Raw được giữ để có thể xử lý lại.
+Thư mục này chịu trách nhiệm đọc dữ liệu thô (Bronze) từ `01_craw_data/`, thực hiện làm sạch dữ liệu (Data Cleaning), chuẩn hóa kiểu dữ liệu, khử trùng lặp và kiểm định chất lượng nghiêm ngặt (Data Contracts) trước khi đồng bộ lên **MinIO Object Storage (prefix `current/silver/`)**.
 
-## Các bước
+---
 
-| Module | Việc thực hiện / đầu ra |
-|---|---|
-| `category/process_category.py` | Chuẩn hóa category và đường phân cấp; đầu ra `category/category.csv`, `category/sub_category.csv`. |
-| `daily_price/process_daily_price.py` | Xử lý các ngày hợp lệ từ raw, nối các khóa `(product_id, seller_product_id, crawl_date)` chưa có vào `daily_price/daily_price_history.csv`. Giúp bù ngày nếu transform chạy muộn hoặc retry sau nửa đêm. |
-| `product/process_product.py` | Chuẩn hóa listing/detail/seller/product-category, lọc snapshot tháng hiện tại và ghi CSV product sạch. |
-| `review/process_review.py` | Đọc theo chunk, chuẩn hóa và chỉ nối review mới theo `(review_id, product_id, seller_product_id)`. |
-| `run_all_preprocessing.py` | Chạy các module trên theo thứ tự. |
-| `validate_silver.py` | Kiểm tra schema, khóa bắt buộc, trùng khóa, định dạng ngày và miền giá trị trước khi nạp Gold. |
-| `pareto/pareto_category.ipynb` | Notebook phân tích Pareto, không nằm trong DAG. |
+## 1. Chi tiết các Module Tiền Xử Lý
 
-## Cách hiểu dữ liệu đầu ra
+| Module | Tập tin đầu vào (Bronze) | Tập tin đầu ra (Silver) | Nghiệp vụ làm sạch & chuẩn hóa dữ liệu |
+|---|---|---|---|
+| **Category** | `01_craw_data/category/*.csv` | `02_process_raw_data/category/category.csv`<br/>`sub_category.csv` | - Chuẩn hóa chuỗi văn bản, loại bỏ khoảng trắng thừa.<br/>- Ép kiểu ID sang số nguyên an toàn (`Int64`), loại bỏ dòng lỗi.<br/>- Khử trùng lặp trên `category_id`. |
+| **Daily Price** | `01_craw_data/daily_price/daily_price_history.csv` | `02_process_raw_data/daily_price/daily_price_history.csv` | - **Chuẩn hóa giá**: Loại bỏ hoàn toàn bản ghi có `price <= 0` hoặc rỗng để tránh làm lệch chỉ số giá trung bình (ASP).<br/>- **Fallback giá niêm yết**: Nếu thiếu `list_price` / `original_price` thì điền bằng `price`.<br/>- **Chuẩn hóa giảm giá**: Tính toán lại `discount = list_price - price` và `discount_rate` trong khoảng `[0, 100]`.<br/>- **Khử trùng lặp**: Đảm bảo duy nhất trên bộ ba `(product_id, seller_product_id, crawl_date)`. Nối tiếp dữ liệu lịch sử các ngày. |
+| **Product** | `01_craw_data/product/*.csv` | `02_process_raw_data/product/product.csv`<br/>`product_detail.csv`<br/>`product_seller.csv`<br/>`product_category.csv` | - **Lọc snapshot tháng hiện tại**: Giữ các bản ghi có `crawl_date` thuộc tháng thực thi (`YYYY-MM`).<br/>- **Chuẩn hóa thương hiệu**: Gán nhãn `'Không thương hiệu'` cho các trường hợp thiếu tên hoặc giá trị OEM, No Brand.<br/>- **Giới hạn số học**: Rating được đưa về khoảng `[0.0, 5.0]`, số lượng bán và lượt thích được điền mặc định 0 nếu rỗng.<br/>- Khử trùng lặp theo khóa chính của từng bảng. |
+| **Review** | `01_craw_data/review/product_review.csv` | `02_process_raw_data/review/product_review.csv` | - **Xử lý theo khối (Chunking)**: Duyệt từng khối **150.000 dòng** để tối ưu bộ nhớ RAM khi dữ liệu đạt hàng triệu bản ghi.<br/>- **Bảo toàn tính trung thực của Rating**: Lọc bỏ các dòng thiếu rating hoặc ngoài khoảng `[1, 5]`, tuyệt đối không tự tiện điền mặc định 5 sao.<br/>- **Lọc trùng theo bộ 3 khóa kết hợp**: Chỉ nối các review mới chưa từng xuất hiện theo `(review_id, product_id, seller_product_id)`. |
 
-- Daily price và review là lịch sử tích lũy, không ghi đè các ngày/review đã có.
-- Các CSV product là snapshot tháng hiện tại và được tạo từ raw có `crawl_date` thuộc tháng đó; chúng không phải lịch sử snapshot lâu dài trong cùng file sạch.
-- Các khóa giúp tránh lặp khi chạy lại, nhưng không sửa nội dung của một key cũ trong bảng fact.
-- Cột `crawl_date` của product biểu diễn tháng (`YYYY-MM`), daily price biểu diễn ngày (`YYYY-MM-DD`).
+---
 
-## Chạy thủ công
+## 2. Master Pipeline & Cơ chế Tối ưu Băm SHA-256
 
-Từ thư mục gốc:
-
-```bash
-python 02_process_raw_data/run_all_preprocessing.py
+```mermaid
+flowchart TD
+    Bronze["01_craw_data (Raw CSVs)"] --> HashCheck{"SHA-256 Hash<br/>đã thay đổi?"}
+    
+    HashCheck -->|Không đổi| Skip["Skip Transform<br/>(Tiết kiệm CPU/RAM)"]
+    HashCheck -->|Có thay đổi| CleanModule["Chạy Module Làm Sạch<br/>(Category / Price / Product / Review)"]
+    
+    CleanModule --> GenSilver["Sinh Silver CSVs"]
+    GenSilver --> Validator{"validate_silver.py<br/>(8 Data Contracts)"}
+    
+    Validator -->|FAIL| RaiseError["SystemExit(1)<br/>Hủy bỏ & Chặn Pipeline"]
+    Validator -->|PASS| Ready["Hợp lệ 100%<br/>Promote MinIO & Nạp Gold"]
 ```
 
-Hoặc chạy module `process_*.py` riêng. Cần raw đầu vào tương ứng. Lệnh thủ công chỉ cập nhật CSV local; để đồng bộ MinIO hãy gọi adapter trong Compose, còn để nạp Supabase cần chạy loader. Trong DAG, preprocess chạy sau lượt giá 21:00, từ 22:00 giờ Việt Nam (`Asia/Ho_Chi_Minh`). Xem [README tổng](../README.md) cho end-to-end.
+Script điều phối tổng [`run_all_preprocessing.py`](run_all_preprocessing.py) thực thi tuần tự 4 module trên với cơ chế tối ưu hiệu năng:
+* Trước khi chạy một module, script tính toán mã băm SHA-256 của toàn bộ tệp đầu vào và so sánh với lịch sử lưu tại `.preprocessing_state.json`.
+* **Nếu dữ liệu thô không có dòng mới**: Script tự động **Skip** module đó, giúp tiết kiệm tối đa thời gian xử lý và tài nguyên CPU.
+* **Ghi tệp an toàn (Atomic File Replace)**: Sử dụng tệp tạm `.tmp` và `os.replace` để bảo đảm tệp state không bị hỏng nếu bị ngắt tiến trình đột ngột.
 
-Kiểm tra Silver thủ công sau preprocessing:
+---
+
+## 3. Kiểm Định Hợp Đồng Dữ Liệu (Data Contract Validation)
+
+Script [`validate_silver.py`](validate_silver.py) là **chốt chặn chất lượng dữ liệu** bắt buộc trước khi dữ liệu được phép nạp vào kho Gold (PostgreSQL). Nó kiểm tra 8 hợp đồng dữ liệu nghiêm ngặt:
+
+1. **Required Columns**: Đầy đủ các cột bắt buộc theo schema.
+2. **Key Integrity**: Cột khóa không được phép chứa giá trị rỗng (Null/Blank).
+3. **Uniqueness**: Không có bất kỳ bản ghi nào bị trùng lặp khóa chính / khóa duy nhất.
+4. **Format Dates**: Cột ngày phải đúng định dạng (`YYYY-MM-DD` cho Daily Price, `YYYY-MM` cho Product snapshot).
+5. **Value Range**: Kiểm tra khoảng giá trị hợp lệ (ví dụ: `price > 0`, `rating BETWEEN 1 AND 5`, `discount_rate BETWEEN 0 AND 100`).
+
+> ⚠️ **Quy tắc chặn**: Nếu bất kỳ tệp CSV nào vi phạm hợp đồng, `validate_silver.py` sẽ **báo lỗi và thoát với mã `SystemExit(1)`**, chặn toàn bộ quá trình Promote dữ liệu lên MinIO và ngăn chặn nạp dữ liệu rác vào Supabase.
+
+---
+
+## 4. Điều phối qua Airflow & Cơ chế Staging
+
+Trong hệ thống Docker / Airflow:
+1. Task `run_preprocessing` chạy script `run_all_preprocessing.py`. Dữ liệu mới được tải lên vùng tạm của MinIO (`staging/<run_id>/silver/`) kèm tệp manifest `_complete.json`.
+2. Task `validate_silver_data` tải dữ liệu từ vùng tạm xuống và chạy `validate_silver.py`.
+3. Chỉ khi bước kiểm định đạt 100% tiêu chuẩn, adapter `minio_task.py` mới thực hiện **Atomic Promotion**: sao lưu bản Silver cũ vào `history/<run_id>/silver/` và đưa bản mới vào `current/silver/`.
+4. Cả 2 task đều được bảo vệ bởi Airflow Pool `tiki_sync_pool` (1 slot) để đảm bảo không bị xung đột tài nguyên giữa các DAG.
+
+---
+
+## 5. Hướng dẫn Chạy Thủ công
+
+Đứng từ thư mục gốc của repository:
 
 ```bash
+# 1. Chạy toàn bộ quy trình tiền xử lý 4 module
+python 02_process_raw_data/run_all_preprocessing.py
+
+# 2. Hoặc có thể chạy riêng lẻ từng module khi cần:
+python 02_process_raw_data/category/process_category.py
+python 02_process_raw_data/daily_price/process_daily_price.py
+python 02_process_raw_data/product/process_product.py
+python 02_process_raw_data/review/process_review.py
+
+# 3. Kiểm định chất lượng dữ liệu Silver sau khi làm sạch
 python 02_process_raw_data/validate_silver.py
 ```
-
-Nếu validation thất bại, sửa hoặc chạy lại preprocessing trước khi nạp Gold. Airflow cũng chạy kiểm tra này trước task load Supabase.

@@ -154,13 +154,80 @@ CREATE TABLE IF NOT EXISTS fact_review (
 CREATE INDEX IF NOT EXISTS ix_review_prodid ON fact_review(product_id);
 CREATE INDEX IF NOT EXISTS ix_review_rating ON fact_review(rating);
 
--- Views thân thiện với Power BI, giữ nguyên các bảng lưu lịch sử nguồn.
+-- Views thân thiện với Power BI và phân tích chuyên sâu (Data Analytics)
+DROP VIEW IF EXISTS vw_product_performance CASCADE;
+DROP VIEW IF EXISTS vw_daily_price_analysis CASCADE;
+DROP VIEW IF EXISTS vw_review_analysis CASCADE;
+
 CREATE OR REPLACE VIEW vw_daily_price_analysis AS
-SELECT p.*, d.product_name, d.brand_name, d.product_type
+SELECT 
+    p.id,
+    p.product_id,
+    p.seller_product_id,
+    p.seller_id,
+    p.category_id,
+    c.name AS category_name,
+    p.crawl_date,
+    p.price,
+    p.list_price,
+    p.original_price,
+    p.discount,
+    p.discount_rate,
+    p.rating_average,
+    p.review_count,
+    p.all_time_quantity_sold,
+    p.inventory_status,
+    d.product_name,
+    d.brand_name,
+    d.product_type
 FROM fact_daily_price AS p
-LEFT JOIN dim_product AS d USING (product_id);
+LEFT JOIN dim_product AS d ON p.product_id = d.product_id
+LEFT JOIN dim_category AS c ON p.category_id = c.category_id;
 
 CREATE OR REPLACE VIEW vw_review_analysis AS
-SELECT r.*, d.product_name, d.brand_name, d.product_type
+SELECT 
+    r.review_id,
+    r.product_id,
+    r.seller_product_id,
+    r.seller_id,
+    r.rating,
+    r.title,
+    r.content,
+    r.review_created_at,
+    r.purchased,
+    r.thank_count,
+    r.comment_count,
+    r.is_photo,
+    r.crawl_time,
+    d.product_name,
+    d.brand_name,
+    d.product_type
 FROM fact_review AS r
-LEFT JOIN dim_product AS d USING (product_id);
+LEFT JOIN dim_product AS d ON r.product_id = d.product_id;
+
+-- View tổng hợp hiệu suất kinh doanh phục vụ Dashboard Power BI (Executive Summary)
+CREATE OR REPLACE VIEW vw_product_performance AS
+SELECT 
+    d.product_id,
+    d.product_name,
+    d.brand_name,
+    d.product_type,
+    c.category_id,
+    c.name AS category_name,
+    d.rating_average,
+    d.review_count,
+    d.all_time_quantity_sold,
+    p.price AS latest_price,
+    p.list_price AS latest_list_price,
+    p.discount_rate AS latest_discount_rate,
+    (d.all_time_quantity_sold * COALESCE(p.price, 0)) AS estimated_total_revenue,
+    d.latest_crawl_month
+FROM dim_product AS d
+LEFT JOIN LATERAL (
+    SELECT price, list_price, discount_rate, category_id
+    FROM fact_daily_price fdp
+    WHERE fdp.product_id = d.product_id
+    ORDER BY crawl_date DESC
+    LIMIT 1
+) p ON true
+LEFT JOIN dim_category c ON p.category_id = c.category_id;

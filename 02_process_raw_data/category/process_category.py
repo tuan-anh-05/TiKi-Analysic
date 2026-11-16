@@ -30,8 +30,9 @@ def clean_categories(input_file: Path, output_file: Path) -> pd.DataFrame:
             df[c] = df[c].replace({"nan": None, "None": None, "": None})
 
     # 2. Chuẩn hóa category_id
-    df["category_id"] = pd.to_numeric(df["category_id"], errors="coerce").astype("int64")
+    df["category_id"] = pd.to_numeric(df["category_id"], errors="coerce").astype("Int64")
     df = df.dropna(subset=["category_id"])
+    df["category_id"] = df["category_id"].astype("int64")
 
     # 3. Loại bỏ trùng lặp
     df = df.drop_duplicates(subset=["category_id"], keep="first").reset_index(drop=True)
@@ -53,7 +54,9 @@ def clean_sub_categories(input_file: Path, output_file: Path, valid_cat_ids: set
     initial_len = len(df)
 
     # 1. Chuẩn hóa category_id gốc
-    df["category_id"] = pd.to_numeric(df["category_id"], errors="coerce").astype("int64")
+    df["category_id"] = pd.to_numeric(df["category_id"], errors="coerce").astype("Int64")
+    df = df.dropna(subset=["category_id"])
+    df["category_id"] = df["category_id"].astype("int64")
 
     # 2. Chuẩn hóa các cột ID phân cấp (1 đến 5) sang kiểu số nguyên có thể chứa null (Int64)
     id_cols = [c for c in df.columns if c.endswith("_id") and c != "category_id"]

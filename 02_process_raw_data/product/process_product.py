@@ -21,7 +21,11 @@ def get_project_dir() -> Path:
 
 def filter_current_month(df: pd.DataFrame) -> pd.DataFrame:
     """Keep only rows whose crawl_date belongs to the month this script runs."""
-    current_month = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")).strftime("%Y-%m")
+    run_date = os.environ.get("TIKI_RUN_DATE")
+    if run_date:
+        current_month = datetime.strptime(run_date, "%Y-%m-%d").strftime("%Y-%m")
+    else:
+        current_month = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")).strftime("%Y-%m")
     df["crawl_date"] = df["crawl_date"].astype(str).str.strip().str[:7]
     filtered = df.loc[df["crawl_date"] == current_month].copy()
     print(f"  ✓ Lọc crawl_date tháng {current_month}: giữ {len(filtered):,}/{len(df):,} dòng")

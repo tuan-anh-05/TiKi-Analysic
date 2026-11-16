@@ -1,35 +1,84 @@
-# Crawl dữ liệu Tiki (Extract / Bronze)
+# Tầng Thu Thập Dữ Liệu Tiki (Bronze / Ingestion Layer)
 
-Thư mục này gọi API của Tiki và ghi dữ liệu nguồn vào CSV. Khi chạy qua Airflow, script vẫn làm việc trên CSV working copy trong repo được mount vào container; `minio_task.py` khôi phục phiên bản MinIO trước khi chạy và đồng bộ file thay đổi vào `current/bronze/` sau đó. Git/LFS CSV là dữ liệu khởi tạo, MinIO là nơi lưu bền cho lần chạy Docker.
+Thư mục này chịu trách nhiệm thu thập toàn bộ dữ liệu thô từ hệ thống API công khai của sàn thương mại điện tử Tiki, lưu trữ dưới dạng các tệp CSV có cấu trúc và sẵn sàng đồng bộ lên **MinIO Object Storage (prefix `current/bronze/`)**.
 
-## Các nhóm dữ liệu
+---
 
-| Thư mục | Script/nguồn vào | Kết quả và grain |
-|---|---|---|
-| `category/` | `category.csv`, `sub_category.csv`; notebook khám phá | Danh sách category và đường phân cấp sub-category. Là nguồn tương đối tĩnh, thường nạp một lần. |
-| `daily_price/` | `crawl_daily_price.py`; danh sách `product_pareto.csv` | `daily_price_history.csv`: một sản phẩm/biến thể ở một ngày crawl; `crawl_daily_log.csv`: log lỗi có product/variant ID. Lượt 18:00 crawl danh sách; lượt 21:00 đọc log lỗi trong ngày và nối các sản phẩm còn thiếu vào cùng file, không crawl lại sản phẩm đã thành công. |
-| `product/` | `product.py` cùng category | `product.csv` (listing), `product_detail.csv` (thuộc tính sản phẩm), `product_seller.csv` (seller/offer), `product_category.csv` (quan hệ sản phẩm-category). Các file product là snapshot theo tháng. |
-| `review/` | `review.py` cùng dữ liệu sản phẩm/seller | `product_review.csv`: review gắn product/biến thể; khóa nhận diện `(review_id, product_id, seller_product_id)`. |
+## 1. Cấu trúc và Chi tiết các Crawler
 
-Tên cột CSV có thể phản ánh trực tiếp payload nguồn; từ điển cột DB/analytics xem [schema Supabase](../03_push_to_sql/README.md#mo-hinh-du-lieu-bang-dong-cot). Crawler không tự sửa schema cơ sở dữ liệu.
+```mermaid
+flowchart LR
+    TikiAPI["Tiki Public API"] --> CatCrawler["crawl_category.py"]
+    TikiAPI --> ProdCrawler["crawl_product.py"]
+    TikiAPI --> PriceCrawler["crawl_daily_price.py"]
+    TikiAPI --> RevCrawler["crawl_review.py"]
 
-## Cơ chế tiếp tục và giới hạn
-
-- CSV được tích lũy; script không xóa lịch sử trước khi crawl.
-- File lớn được flush định kỳ để giữ phần đã thu thập nếu tiến trình bị ngắt.
-- Crawler product lưu checkpoint theo danh mục/tháng để có thể tiếp tục phần chưa hoàn tất.
-- Daily price giữ log lỗi theo product/variant; lượt 21:00 retry các lỗi của lượt 18:00 và nối kết quả vào cùng file ngày. Nếu tiến trình bị ngắt trước khi kịp ghi log, các key chưa có trong file kết quả vẫn có thể được phục hồi ở lần chạy sau. Sản phẩm trả 404/410 được tạm ngừng thử lại theo logic script.
-- Review loại trùng theo bộ ba ID và dùng thứ tự API để dừng khi gặp review đã cũ.
-- Crawl phụ thuộc API/mạng, có thể lâu và bị giới hạn phía Tiki. Không chạy nhiều job cùng lúc trên cùng CSV; DAG đặt `max_active_runs=1`.
-
-## Chạy thủ công (không cần Airflow)
-
-Từ thư mục gốc repo, trong môi trường Python có các dependency crawler:
-
-```bash
-python 01_craw_data/daily_price/crawl_daily_price.py
-python 01_craw_data/product/product.py
-python 01_craw_data/review/review.py
+    CatCrawler --> CatCSV["category.csv<br/>sub_category.csv"]
+    CatCSV -.-> ProdCrawler
+    ProdCrawler --> ProdCSV["product.csv<br/>product_detail.csv<br/>product_seller.csv<br/>product_category.csv"]
+    ProdCSV -.-> RevCrawler
+    
+    ParetoCSV["product_pareto.csv<br/>(Top 20% SKUs)"] -.-> PriceCrawler
+    PriceCrawler --> PriceCSV["daily_price_history.csv<br/>crawl_daily_log.csv"]
+    RevCrawler --> RevCSV["product_review.csv"]
 ```
 
-Daily price cần `product_pareto.csv`; product cần category; review cần thông tin product/variant. Chạy xong thủ công không tự đẩy dữ liệu lên MinIO hoặc Supabase: cần chạy transform và loader riêng. Luồng Docker/Airflow đầy đủ nằm trong [README tổng](../README.md#chay-tu-dau-bang-docker-tren-windows).
+| Nhóm dữ liệu | Script thực thi | Dữ liệu đầu vào | Dữ liệu đầu ra (CSV) | Grain & Ý nghĩa |
+|---|---|---|---|---|
+| **Category** | `category/crawl_category.py` | Tiki Category API | `category.csv`<br/>`sub_category.csv` | Danh mục gốc (cấp 1) và cây phân cấp danh mục con (cấp 1 đến cấp 5). Nguồn dữ liệu tương đối tĩnh, crawl khi khởi tạo hệ thống. |
+| **Product** | `product/crawl_product.py` | `category/category.csv` | `product.csv`<br/>`product_detail.csv`<br/>`product_seller.csv`<br/>`product_category.csv` | **Snapshot theo tháng (`YYYY-MM`)**:<br/>- `product.csv`: Danh sách cặp `(product_id, seller_product_id)`.<br/>- `product_detail.csv`: Thuộc tính chi tiết (SKU, brand, rating, sold).<br/>- `product_seller.csv`: Gian hàng, giá bán, cờ `is_best_store`.<br/>- `product_category.csv`: Cây breadcrumb liên kết sản phẩm - danh mục. |
+| **Daily Price** | `daily_price/crawl_daily_price.py`<br/>`daily_price/recovery.py` | `daily_price/product_pareto.csv` | `daily_price_history.csv`<br/>`crawl_daily_log.csv` | **Lịch sử biến động giá theo ngày (`YYYY-MM-DD`)** của các sản phẩm trọng tâm (Pareto 80/20). Ghi nhận giá bán, giá niêm yết, tỷ lệ giảm giá và tồn kho. |
+| **Review** | `review/crawl_review.py` | `product/product_detail.csv`<br/>`product/product_seller.csv` | `product_review.csv` | Đánh giá khách hàng lũy kế. Nhận diện duy nhất bằng bộ ba khóa: `(review_id, product_id, seller_product_id)`. |
+
+---
+
+## 2. Cơ chế Vận hành Thông minh & Chống lỗi (Fault Tolerance)
+
+1. **Khả năng tiếp tục khi bị ngắt quãng (Resumable Crawl)**:
+   - Các crawler định kỳ flush dữ liệu từ bộ nhớ xuống đĩa (`SAVE_EVERY`), không sợ mất dữ liệu nếu tiến trình bị kill giữa chừng.
+   - `crawl_daily_price.py` tự động đối soát với các khóa thành công đã có trong `daily_price_history.csv` của ngày chạy (`crawl_date`), chỉ crawl các ID còn thiếu.
+   - `crawl_review.py` duyệt theo thứ tự thời gian mới nhất; khi gặp review đã có trong file thì tự động dừng quét cho sản phẩm đó để tiết kiệm request.
+2. **Xử lý Rate Limit & Thoát mã lỗi (Exit Code)**:
+   - Áp dụng thời gian chờ ngẫu nhiên (`REQUEST_DELAY`) và cơ chế Exponential Backoff khi gặp mã lỗi HTTP `429 Too Many Requests` hoặc `5xx Server Error`.
+   - Nếu bị sàn chặn (HTTP 401, 403, 429 kéo dài), script sẽ **thoát với mã lỗi `sys.exit(1)`**. Điều này giúp Airflow ghi nhận task thất bại và kích hoạt cơ chế retry tự động theo lịch thay vì báo thành công giả tạo.
+3. **Cơ chế lưu trữ lũy kế**:
+   - `daily_price_history.csv` và `product_review.csv` được ghi nối tiếp (`mode="a"`), bảo tồn toàn bộ dữ liệu lịch sử của các đợt crawl trước đó.
+
+---
+
+## 3. Điều phối qua Airflow (Orchestration)
+
+Khi chạy trong môi trường Docker / Airflow, các crawler được điều phối tự động qua adapter `04_orchestration/airflow/scripts/minio_task.py`:
+
+* **DAG Monthly (`tiki_product_monthly`)**:
+  - Kích hoạt lúc **02:00 ngày 1 hàng tháng**.
+  - Thực thi: `crawl_product.py` quét toàn bộ danh mục và crawl chi tiết sản phẩm tháng mới (`execution_timeout=144h`).
+* **DAG Daily (`tiki_extract_transform_load`)**:
+  - **03:00**: `crawl_product.py` quét bổ sung sản phẩm mới xuất hiện (tự động skip nếu DAG monthly đang chạy).
+  - **09:00**: `crawl_review.py` thu thập các đánh giá mới phát sinh.
+  - **14:00**: `crawl_daily_price.py` lượt crawl giá chính trong ngày.
+  - **21:00**: `crawl_daily_price.py` đọc log lỗi trong ngày, crawl bù các SKU/variant chưa thành công.
+
+Sau mỗi lượt crawl hoàn tất, adapter sẽ tính mã băm SHA-256 và đồng bộ các file CSV có thay đổi lên MinIO Bronze (`current/bronze/`), đồng thời sao lưu bản cũ vào `history/<run_id>/bronze/`.
+
+---
+
+## 4. Hướng dẫn Chạy Thủ công (Manual Execution)
+
+Nếu muốn chạy trực tiếp bằng dòng lệnh không qua Airflow, đứng từ thư mục gốc của repository (`TiKi-Analysic`):
+
+```bash
+# 1. Crawl danh mục (chạy một lần ban đầu)
+python 01_craw_data/category/crawl_category.py
+
+# 2. Crawl sản phẩm và chi tiết thuộc tính
+python 01_craw_data/product/crawl_product.py
+
+# 3. Crawl giá hàng ngày (cần file product_pareto.csv)
+python 01_craw_data/daily_price/crawl_daily_price.py
+
+# 4. Crawl đánh giá khách hàng (cần dữ liệu product_detail và product_seller)
+python 01_craw_data/review/crawl_review.py
+```
+
+> **Lưu ý**: Chạy thủ công bằng lệnh trên chỉ cập nhật dữ liệu CSV tại máy local. Để nạp dữ liệu vào cơ sở dữ liệu phân tích, cần tiếp tục chạy tầng Tiền xử lý (`02_process_raw_data`) và Nạp dữ liệu (`03_push_to_sql`).

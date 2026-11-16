@@ -145,7 +145,7 @@ def push_incremental_postgres(project_dir: Path, data_root: Path, db_url: str, l
     engine = create_engine(sqlalchemy_url, pool_pre_ping=True)
 
     # Tạo bảng nếu chưa có (PostgreSQL dùng execute thay cho executescript)
-    ddl_file = project_dir / "03_push_to_sql" / "create_database" / "create_tables_postgres.sql"
+    ddl_file = project_dir / "03_push_to_sql" / "create_tables_postgres.sql"
     if ddl_file.exists():
         with open(ddl_file, "r", encoding="utf-8") as f:
             cursor.execute(f.read())

@@ -1,114 +1,221 @@
-# Airflow + MinIO bằng Docker Desktop
+# Điều Phối Pipeline & Hạ Tầng Tự Động Hóa (Orchestration / Airflow & MinIO)
 
-Thư mục này chứa Docker Compose, DAG `tiki_extract_transform_load` và adapter `scripts/minio_task.py`. Compose chạy Airflow 2.10.5/Python, PostgreSQL 16 riêng cho metadata Airflow và MinIO AIStor. Supabase PostgreSQL vẫn là đích phân tích; không dùng `airflow-db` thay Supabase.
+Thư mục này chứa toàn bộ cấu hình hạ tầng container hóa (**Docker Compose**), hệ thống lập lịch & điều phối quy trình tự động (**Apache Airflow 2.10.5**), hệ thống lưu trữ đối tượng dạng hồ dữ liệu (**MinIO S3 Lakehouse**) và tệp adapter đồng bộ dữ liệu thông minh ([`scripts/minio_task.py`](scripts/minio_task.py)).
 
-## Luồng task
+---
 
-```text
-Tiki -> crawler -> CSV working copy -> MinIO current/bronze
-    -> transform -> CSV processed -> MinIO current/silver
-    -> validate Silver -> loader -> Supabase PostgreSQL (checkpoint -> MinIO current/state)
+## 1. Kiến Trúc Điều Phối Tổng Thể (Orchestration Architecture)
+
+Hệ thống được thiết kế theo mô hình **Dual-DAG Architecture** kết hợp với **Airflow Pool (1 slot)** để giải quyết triệt để vấn đề thời gian crawl lớn (96h - 120h) và ngăn chặn hoàn toàn xung đột tài nguyên (Race Condition) khi ghi dữ liệu lên MinIO và Supabase PostgreSQL:
+
+```mermaid
+flowchart TD
+    subgraph DAG_MONTHLY["DAG 1: tiki_product_monthly (02:00 Ngày 1 Hàng Tháng)"]
+        M_Start["Start"] --> M_Crawl["crawl_monthly_product_full<br/>(Quét 100 trang toàn bộ danh mục)<br/>Timeout: 144 Giờ | Retries: 1"]
+        M_Crawl --> M_ExtractEnd["extract_complete"]
+    end
+
+    subgraph DAG_DAILY["DAG 2: tiki_extract_transform_load (Hằng Ngày: 03h, 09h, 14h, 21h)"]
+        D_Start["Start"] --> D_GatePrice{"14:00 & 21:00?"}
+        D_Start --> D_GateReview{"09:00?"}
+        D_Start --> D_GateProduct{"03:00?"}
+
+        D_GatePrice -->|Yes| D_CrawlPrice["crawl_daily_price<br/>(14h chính, 21h bù lỗi)"]
+        D_GateReview -->|Yes| D_CrawlReview["crawl_new_reviews<br/>(Quét review mới)"]
+        D_GateProduct -->|Yes & Monthly NOT running| D_CrawlProduct["crawl_daily_product<br/>(Cập nhật SKU mới)"]
+
+        D_CrawlPrice & D_CrawlReview & D_CrawlProduct --> D_ExtractEnd["extract_complete"]
+    end
+
+    subgraph MUTEX_POOL["Khu Vực Khóa Độc Quyền (Airflow Pool: tiki_sync_pool - Dung lượng: 1 Slot)"]
+        direction TB
+        M_ExtractEnd & D_ExtractEnd --> Transform["run_preprocessing<br/>(Làm sạch & SHA-256 Cache)"]
+        Transform --> Validate["validate_silver_data<br/>(Kiểm tra 8 Data Contracts)"]
+        Validate --> Load["load_new_rows_to_supabase<br/>(Nạp gia tăng & Idempotent Upsert)"]
+    end
+
+    Load --> TargetDB[("Supabase PostgreSQL (Gold)")]
+    Load --> MinIOStorage[("MinIO S3 (Lakehouse)")]
 ```
 
-Adapter tải object hiện hành cần cho task xuống working copy, chạy script gốc trong `01_craw_data/`, `02_process_raw_data/` hoặc `03_push_to_sql/`, rồi upload file thay đổi. Mỗi task crawl đồng bộ Bronze khi crawler kết thúc (kể cả khi lệnh crawl lỗi, để giữ dữ liệu partial/checkpoint trước khi retry); preprocessing đồng bộ Silver; loader đồng bộ checkpoint state. Khi thay object current, object trước được copy vào `history/<run-id>/...`. CSV lớn được tải/truyền như một object đầy đủ. Git/LFS chỉ cung cấp snapshot nguồn ban đầu; task không commit dữ liệu phát sinh.
+---
 
-## Điều kiện
+## 2. Chi Tiết Lập Lịch & Phân Bổ Tác Vụ (Scheduling Rules)
 
-- Docker Desktop trên Windows với WSL2 engine hoạt động.
-- MinIO AIStor Free Tier license thật tại `04_orchestration/airflow/minio.license` (cùng thư mục Compose). File được mount read-only vào container.
-- Supabase PostgreSQL và `SUPABASE_DB_URL` hợp lệ; schema có thể tạo bằng SQL Editor, còn loader cũng chạy DDL.
-- `.env` tạo từ `.env.example`, không commit. Các secret/password trong file mẫu chỉ là ví dụ.
+Tất cả các mốc thời gian đều được cấu hình theo giờ Việt Nam (**`Asia/Ho_Chi_Minh`**, UTC+7):
 
-MinIO AIStor license cần thiết cho image cấu hình ở đây. Xem [cài AIStor container](https://docs.min.io/aistor/installation/container/install/) và [license](https://docs.min.io/aistor/operations/licenses/).
+### 1. DAG `tiki_product_monthly` (Chạy đầu tháng)
+* **Lịch kích hoạt**: `0 2 1 * *` (02:00 sáng ngày 1 hàng tháng).
+* **Mục tiêu**: Quét sâu toàn bộ danh mục và crawl chi tiết tất cả sản phẩm đang lưu hành trên sàn trong tháng đó.
+* **Thời gian thực thi tối đa (Execution Timeout)**: **144 giờ (6 ngày)**, `retries = 1` (exponential backoff 30 phút). Nhờ cơ chế batch flush và checkpoint trong `crawl_product.py`, nếu container khởi động lại thì task sẽ tiếp tục từ mốc đã dừng chứ không crawl lại từ đầu.
+* **Chuỗi tác vụ**: `crawl_monthly_product_full >> run_preprocessing >> validate_silver_data >> load_new_rows_to_supabase`.
 
-## Setup lần đầu
+### 2. DAG `tiki_extract_transform_load` (Pipeline hằng ngày)
+* **Lịch kích hoạt**: `0 3,9,14,21 * * *` (Chạy vào các mốc 03:00, 09:00, 14:00 và 21:00).
+* **Phân bổ khung giờ**:
+  * **03:00 – `crawl_daily_product`**: Quét bổ sung sản phẩm mới xuất hiện. Tự động kiểm tra trạng thái qua `is_monthly_crawl_running()`: nếu DAG monthly đang chạy thì task này sẽ **Skip** để không tranh chấp băng thông/IP.
+  * **09:00 – `crawl_new_reviews`**: Crawl các đánh giá mới phát sinh cho các sản phẩm hiện có.
+  * **14:00 – `crawl_daily_price`**: Lượt thu thập biến động giá chính trong ngày.
+  * **21:00 – `crawl_daily_price`**: Lượt rà soát cuối ngày, đọc log lỗi của lượt 14h và crawl bù các SKU/biến thể còn thiếu vào cùng tệp lịch sử.
+* **Chuỗi tác vụ sau crawl**: `extract_complete >> run_preprocessing >> validate_silver_data >> load_new_rows_to_supabase`.
 
-Mở Command Prompt hoặc PowerShell tại thư mục này:
+---
 
-```cmd
+## 3. Cơ Chế MinIO Adapter & Atomic Promotion
+
+Tệp [`scripts/minio_task.py`](scripts/minio_task.py) đóng vai trò là tầng trung gian (Adapter) giữa thư mục làm việc cục bộ của các container và MinIO S3 Lakehouse:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant AF as Airflow Task
+    participant Script as Local Python Script
+    participant MinIO as MinIO S3 Lakehouse
+
+    Note over AF,MinIO: Giai đoạn 1: Chuẩn bị & Thu thập
+    AF->>MinIO: Tải dữ liệu current/ liên quan về working copy
+    AF->>Script: Kích hoạt crawler (Bronze)
+    Script->>AF: Hoàn thành ghi CSV cục bộ
+    AF->>MinIO: Upload tệp thay đổi lên current/bronze (Archive bản cũ vào history/)
+
+    Note over AF,MinIO: Giai đoạn 2: Staging & Kiểm định Silver
+    AF->>Script: Kích hoạt run_all_preprocessing.py
+    Script->>AF: Hoàn thành làm sạch Silver
+    AF->>MinIO: Tải tệp sạch lên staging/<run_id>/silver/ + manifest _complete.json
+    AF->>Script: Kích hoạt validate_silver.py (kiểm tra 8 hợp đồng)
+    
+    alt Validation THẤT BẠI
+        Script-->>AF: Exit Code 1 (Lỗi hợp đồng dữ liệu)
+        AF->>MinIO: HỦY BỎ staging, khôi phục Silver cũ, KHÔNG promote
+    else Validation THÀNH CÔNG
+        Script-->>AF: Exit Code 0 (Hợp lệ)
+        AF->>MinIO: ATOMIC PROMOTION: Copy staging sang current/silver/
+        AF->>MinIO: Archive bản Silver cũ vào history/<run_id>/silver/
+    end
+
+    Note over AF,MinIO: Giai đoạn 3: Nạp vào Data Warehouse
+    AF->>Script: Kích hoạt push_to_database.py (Load Supabase)
+    Script->>AF: Cập nhật sync_checkpoint_supabase.json
+    AF->>MinIO: Đồng bộ checkpoint lên current/state/
+```
+
+### Điểm mạnh kiến trúc của Adapter:
+1. **Kiểm tra tính toàn vẹn bằng SHA-256**: Chỉ upload tệp khi mã băm nội dung thực sự thay đổi.
+2. **Atomic Staging & Rollback**: Dữ liệu Silver chưa được kiểm định sẽ nằm ở vùng `staging/`. Nếu `validate_silver.py` phát hiện bất kỳ lỗi nào (sai format, duplicate key, rỗng), adapter tự động rollback về trạng thái sạch trước đó và hủy bỏ đợt staging.
+3. **Sao lưu lịch sử đầy đủ (Audit Trail)**: Mỗi khi ghi đè một đối tượng trong `current/`, bản ghi cũ sẽ được copy lưu trữ tại `history/<run_id>/...` phục vụ truy vết và khôi phục khi cần thiết.
+
+---
+
+## 4. Các Dịch Vụ Trong Docker Compose (`docker-compose.yml`)
+
+Stack Docker được thiết lập khép kín, tối ưu tài nguyên:
+
+| Service | Image | Vai trò & Cấu hình |
+|---|---|---|
+| **`airflow-db`** | `postgres:16` | Cơ sở dữ liệu chuyên biệt lưu trữ metadata, DAG runs, task instances và pools của Airflow. Hoàn toàn tách biệt với Supabase PostgreSQL. |
+| **`minio`** | `quay.io/minio/aistor/minio:latest` | Hệ thống lưu trữ đối tượng tương thích AWS S3. Cung cấp API tại cổng `9000` và giao diện Web Console tại cổng `9001`. |
+| **`airflow-init`** | `tiki-airflow:local` (Custom build) | Container khởi tạo: tự động chạy `airflow db migrate`, tạo tài khoản Admin, và thiết lập Airflow Pool `tiki_sync_pool (1 slot)`. |
+| **`airflow-webserver`** | `tiki-airflow:local` | Giao diện quản trị đồ họa Airflow Web UI tại cổng `8080`. |
+| **`airflow-scheduler`** | `tiki-airflow:local` | Trình giám sát và kích hoạt các DAG theo lịch cron. |
+
+---
+
+## 5. Hướng Dẫn Cài Đặt & Vận Hành Từ Đầu
+
+### Bước 1: Chuẩn bị tệp cấu hình `.env`
+Đứng tại thư mục `04_orchestration/airflow/`:
+
+```bash
+# Windows Command Prompt
 copy .env.example .env
-notepad .env
+
+# Hoặc PowerShell / Bash
+cp .env.example .env
 ```
 
-Đặt Airflow admin credentials, `AIRFLOW_DB_PASSWORD` (chữ/số khuyên dùng vì là thành phần URL nội bộ), Fernet key, secret key webserver, MinIO root credential, MinIO app key và bucket. Lấy Supabase connection string từ Supabase Connect; thay placeholder và bật SSL. Password có ký tự dành riêng trong URI cần percent-encode. Không chia sẻ `.env`.
+Mở tệp `.env` và thiết lập các biến môi trường:
+* `AIRFLOW_ADMIN_USER` & `AIRFLOW_ADMIN_PASSWORD`: Tài khoản đăng nhập Airflow UI.
+* `AIRFLOW_DB_PASSWORD`: Mật khẩu cho Postgres metadata nội bộ.
+* `AIRFLOW_FERNET_KEY`: Khóa mã hóa bảo mật của Airflow (tạo nhanh bằng lệnh Python phía dưới).
+* `AIRFLOW_SECRET_KEY`: Khóa bí mật cho Webserver session.
+* `MINIO_ROOT_USER` & `MINIO_ROOT_PASSWORD`: Tài khoản quản trị MinIO.
+* `MINIO_ACCESS_KEY` & `MINIO_SECRET_KEY`: Cặp khóa truy cập ứng dụng tạo trên MinIO Console.
+* `SUPABASE_DB_URL`: Chuỗi kết nối PostgreSQL đến Supabase có bật `sslmode=require`.
 
-Tạo Fernet key bằng Python:
+> 🔑 **Tạo Fernet Key nhanh bằng Python:**
+> ```bash
+> python -c "import base64,secrets; print(base64.urlsafe_b64encode(secrets.token_bytes(32)).decode())"
+> ```
 
-```cmd
-python -c "import base64,secrets; print(base64.urlsafe_b64encode(secrets.token_bytes(32)).decode())"
-```
+### Bước 2: Chuẩn bị giấy phép MinIO License
+* Đặt tệp license hợp lệ vào đường dẫn `04_orchestration/airflow/minio.license` (được mount chế độ read-only vào container MinIO).
 
-Tại folder này chạy:
-
-```cmd
+### Bước 3: Khởi động hệ thống Docker
+```bash
+# 1. Build image tùy chỉnh (kèm các dependency Python)
 docker compose build
+
+# 2. Khởi tạo database và pool
 docker compose up airflow-init
+
+# 3. Chạy toàn bộ các dịch vụ dưới nền
 docker compose up -d
+
+# 4. Kiểm tra trạng thái hoạt động của các container
 docker compose ps
 ```
 
-`airflow-init` exit code 0 nghĩa là migration Airflow DB/user đã hoàn tất. Sau khi stack lên, Airflow UI là [http://localhost:8080](http://localhost:8080), MinIO Console là [http://localhost:9001](http://localhost:9001); endpoint nội bộ container là `http://minio:9000`.
+* **Airflow Web UI**: [http://localhost:8080](http://localhost:8080)
+* **MinIO Console**: [http://localhost:9001](http://localhost:9001)
 
-Trong MinIO tạo bucket đúng `MINIO_BUCKET` (mặc định `tiki-lake`) và app access key có quyền list/get/read/put/write/copy trong bucket. Ghi cặp key/secret vào `.env`, sau đó recreate Airflow:
+### Bước 4: Bootstrap Dữ Liệu Ban Đầu Lên MinIO
+Sau khi tạo bucket (mặc định: `tiki-lake`) trên MinIO Console, thực hiện seed dữ liệu khởi tạo:
 
-```cmd
-docker compose up -d --force-recreate airflow-webserver airflow-scheduler
-```
-
-Tạo schema Supabase bằng `03_push_to_sql/create_database/create_tables_postgres.sql`. Seed CSV ban đầu lên MinIO một lần:
-
-```cmd
+```bash
 docker compose run --rm airflow-webserver python /opt/tiki/project/04_orchestration/airflow/scripts/minio_task.py bootstrap
 ```
 
-Bootstrap không crawl Tiki, không thay object hiện có. Nó tạo object ban đầu cho dữ liệu CSV/JSON của Bronze/Silver.
+---
 
-## Trigger thử
+## 6. Hướng Dẫn Kích Hoạt Thủ Công (Trigger with Config)
 
-Bật DAG trong Airflow. Chọn **Trigger DAG w/ config**, nhập một trong các giá trị:
+Trên Airflow UI, chọn DAG ➔ nhấn nút **Trigger DAG w/ config** và nhập JSON tương ứng:
 
 ```json
-{"task":"daily_price"}
+{"task": "daily_price"}
 ```
 
-Các giá trị hợp lệ: `daily_price`, `product`, `review`, `preprocess`, `push`. Có thể dùng terminal:
+Các giá trị `task` hợp lệ:
+* `daily_price`: Chỉ chạy luồng crawl giá hàng ngày ➔ transform ➔ validate ➔ load.
+* `product`: Chỉ chạy luồng crawl sản phẩm ➔ transform ➔ validate ➔ load.
+* `review`: Chỉ chạy luồng crawl review ➔ transform ➔ validate ➔ load.
+* `preprocess`: Chạy làm sạch dữ liệu ➔ validate ➔ load.
+* `push`: Kiểm tra và nạp dữ liệu sạch vào Supabase PostgreSQL.
 
-```cmd
+Hoặc kích hoạt nhanh qua dòng lệnh terminal:
+```bash
 docker compose exec airflow-scheduler airflow dags trigger --conf "{\"task\":\"daily_price\"}" tiki_extract_transform_load
 ```
 
-Manual crawl tiếp tục preprocessing và load; `preprocess`/`push` cũng chạy transform trước load. Manual bỏ qua thời gian chờ 22:00/23:00. Để xác nhận pipeline thật sự tới đích, kiểm tra các task crawl, `run_preprocessing`, `load_new_rows_to_supabase` và row count Supabase. Xem log:
+---
 
-```cmd
-docker compose exec airflow-scheduler airflow dags list
-docker compose exec airflow-scheduler airflow dags list-import-errors
+## 7. Các Lệnh Quản Trị & Khắc Phục Sự Cố Thường Gặp
+
+```bash
+# Xem log trực tiếp của scheduler
 docker compose logs -f airflow-scheduler
-docker compose logs -f minio
-```
 
-## Lịch DAG (giờ Việt Nam — Asia/Ho_Chi_Minh)
-
-Tất cả thời gian dưới đây theo giờ Việt Nam (`Asia/Ho_Chi_Minh`, UTC+7).
-
-| Giờ kích hoạt | Task chạy theo lịch | Ghi chú |
-|---|---|---|
-| 02:00 | Crawl product ngày lẻ; crawl review ngày chẵn | Theo ngày Việt Nam; sau crawl DAG chạy ETL đầy đủ. |
-| 10:00 | Crawl product ngày lẻ; crawl review ngày chẵn | Theo ngày Việt Nam; sau crawl DAG chạy ETL đầy đủ. |
-| 18:00 | Crawl giá (`daily_price`) | Crawl lượt đầu; đồng bộ Bronze rồi chạy ETL đầy đủ. |
-| 21:00 | Crawl tiếp giá (`daily_price`) | Đọc log lỗi trong ngày, retry phần còn thiếu và nối vào cùng file ngày; đồng bộ Bronze rồi chạy ETL đầy đủ. |
-
-Trong mỗi lượt có crawl, adapter đồng bộ raw lên MinIO Bronze ngay sau crawler; DAG tiếp tục transform ra Silver, kiểm tra Silver rồi mới load Gold vào Supabase. Lượt 21:00 đọc log lỗi trong ngày, retry các product/variant chưa thành công và append vào cùng `daily_price_history.csv`; adapter tải trạng thái Bronze hiện tại từ MinIO trước khi chạy và lưu file cập nhật sau crawl. Nếu upstream lỗi sau retry, các bước downstream bị chặn. DAG đặt `catchup=False`, tối đa một run hoạt động cùng lúc, và task có tối đa 2 lần retry với delay tăng dần, trần 1 giờ. Loader lọc khóa đã có trong PostgreSQL và dùng unique keys/`ON CONFLICT DO NOTHING`, nên retry sau lỗi giữa chừng không chèn bản ghi trùng. Kiểm tra Silver xác nhận file/cột bắt buộc, khóa không rỗng và duy nhất, ngày đúng định dạng, cùng các miền giá trị chính trước khi load. Giá giữ grain một bản ghi/sản phẩm/ngày: dữ liệu thành công lúc 18:00 không bị ghi đè; 21:00 bổ sung các sản phẩm/biến thể còn thiếu. Máy và Docker phải luôn bật; lịch local không chạy bù khi máy tắt.
-
-## Vận hành và sửa lỗi
-
-```cmd
-docker compose ps
+# Xem log trực tiếp của webserver
 docker compose logs -f airflow-webserver
-docker compose logs -f airflow-scheduler
+
+# Xem log dịch vụ lưu trữ MinIO
 docker compose logs -f minio
+
+# Liệt kê danh sách DAG và kiểm tra lỗi cú pháp (Import Errors)
+docker compose exec airflow-scheduler airflow dags list-import-errors
+
+# Dừng hệ thống nhưng vẫn bảo lưu toàn bộ dữ liệu (Volumes)
 docker compose down
 ```
 
-`down` giữ volumes. Tránh `docker compose down -v` nếu không chủ định xóa MinIO data và Airflow metadata. Nếu DAG không hiện, kiểm tra import errors và scheduler logs. Nếu run không crawl, dùng config form/JSON; trigger không config phụ thuộc lịch. Nếu MinIO access denied, kiểm tra bucket/policy và recreate scheduler/webserver sau sửa `.env`. Nếu MinIO không start, xác nhận license path/nội dung. Nếu Supabase loader lỗi, xem connection URI, SSL, network và loader logs.
-
-Hướng dẫn đầy đủ từ clone đến Power BI nằm trong [README tổng](../../README.md).
+> ⚠️ **Lưu ý an toàn:** Tuyệt đối không dùng lệnh `docker compose down -v` trừ khi bạn thực sự muốn xóa sạch toàn bộ metadata của Airflow và toàn bộ dữ liệu hồ MinIO!

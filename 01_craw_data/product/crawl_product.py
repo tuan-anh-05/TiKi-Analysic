@@ -1,6 +1,6 @@
 from pathlib import Path
 import os
-import json
+import sys
 import time
 import random
 import requests
@@ -22,7 +22,6 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 CATEGORIES_FILE = DATA_ROOT / "01_craw_data" / "category" / "category.csv"
 INPUT_FILE = DATA_DIR / "product.csv"              
-LISTING_CHECKPOINT_FILE = DATA_DIR / "listing_checkpoint.json"
 PRODUCT_FILE = DATA_DIR / "product_detail.csv"
 SELLER_FILE = DATA_DIR / "product_seller.csv"
 CATEGORY_FILE = DATA_DIR / "product_category.csv"
@@ -32,8 +31,14 @@ LISTING_URL = "https://tiki.vn/api/personalish/v1/blocks/listings"
 API_URL = "https://tiki.vn/api/v2/products/{}"
 SAVE_EVERY = 100
 REQUEST_DELAY = (3, 5)
-MAX_RETRIES = 3
-CRAWL_DATE = pd.Timestamp.now(tz="Asia/Ho_Chi_Minh").strftime("%Y-%m")   # Chỉ lấy tháng năm
+MAX_RETRIES = 2
+RUN_DATE = os.environ.get("TIKI_RUN_DATE")
+if RUN_DATE:
+    # Scheduled Airflow retries retain their original logical date even if delayed.
+    CRAWL_TIMESTAMP = pd.Timestamp(RUN_DATE).normalize()
+else:
+    CRAWL_TIMESTAMP = pd.Timestamp.now(tz="Asia/Ho_Chi_Minh").tz_localize(None).normalize()
+CRAWL_DATE = CRAWL_TIMESTAMP.strftime("%Y-%m")
 
 session = requests.Session()
 session.headers.update({
@@ -63,87 +68,198 @@ def save_listing(rows):
 
 
 def fetch_listing(params, retries=3):
-    for attempt in range(retries):
-        r = session.get(LISTING_URL, params=params, timeout=30)
-        if r.status_code == 429 or r.status_code >= 500:
-            time.sleep(10 * (attempt + 1))
-            continue
-        r.raise_for_status()
-        return r.json().get("data") or []
-    raise RuntimeError(f"Failed after {retries} retries: {params}")
+    """Gọi API listing có retry cả lỗi HTTP, timeout và response không phải JSON."""
+    last_error = None
+
+    for attempt in range(1, retries + 1):
+        try:
+            response = session.get(LISTING_URL, params=params, timeout=30)
+
+            # 429: bị giới hạn tần suất; chờ lâu hơn trước khi thử lại.
+            if response.status_code == 429:
+                wait = min(15 * attempt, 60)
+                last_error = RuntimeError(f"HTTP 429 Too Many Requests; chờ {wait}s")
+                if attempt < retries:
+                    time.sleep(wait)
+                    continue
+                break
+
+            # Lỗi máy chủ tạm thời: thử lại.
+            if response.status_code >= 500:
+                last_error = RuntimeError(f"HTTP {response.status_code}")
+                if attempt < retries:
+                    time.sleep(5 * attempt)
+                    continue
+                break
+
+            response.raise_for_status()
+            payload = response.json()  # Có thể lỗi nếu server trả HTML dù HTTP 200.
+
+            if not isinstance(payload, dict):
+                raise ValueError("Response listing không phải JSON object")
+
+            records = payload.get("data")
+            if records is None:
+                # Không coi response sai cấu trúc là trang rỗng hợp lệ.
+                raise ValueError("Response listing không có trường 'data'")
+            if not isinstance(records, list):
+                raise ValueError("Trường 'data' của listing không phải danh sách")
+
+            return records
+
+        except (requests.RequestException, ValueError, RuntimeError) as exc:
+            last_error = exc
+            if attempt < retries:
+                wait = min(3 * attempt, 10)
+                print(f"  [RETRY] Listing lần {attempt}/{retries}: {exc}. Chờ {wait}s")
+                time.sleep(wait)
+
+    raise RuntimeError(f"Listing thất bại sau {retries} lần thử: {last_error}; params={params}")
 
 
 def crawl_product_ids():
-    categories = pd.read_csv(CATEGORIES_FILE).drop_duplicates("category_id")
+    """Quét lại TẤT CẢ danh mục mỗi lần chạy để tìm sản phẩm mới trên Tiki.
 
-    # Dùng checkpoint riêng để chỉ đánh dấu danh mục hoàn tất sau khi crawl đủ trang.
-    done = set()
-    if LISTING_CHECKPOINT_FILE.exists():
-        try:
-            checkpoint = json.loads(LISTING_CHECKPOINT_FILE.read_text(encoding="utf-8"))
-            if checkpoint.get("crawl_month") == CRAWL_DATE:
-                done = {int(category_id) for category_id in checkpoint.get("completed_category_ids", [])}
-        except (OSError, ValueError, TypeError):
-            print("Cảnh báo: không đọc được listing checkpoint; sẽ crawl lại danh mục.")
+    Không sử dụng checkpoint danh mục. Dữ liệu được ghi nối vào product.csv,
+    sau đó dedupe theo product_id, seller_product_id, category_id, crawl_date.
+    """
+    if not CATEGORIES_FILE.exists():
+        raise FileNotFoundError(f"Không tìm thấy file danh mục: {CATEGORIES_FILE}")
 
-    categories = categories[~categories["category_id"].astype(int).isin(done)]
-    print(f"Danh mục cần crawl: {len(categories)} (đã xong tháng {CRAWL_DATE}: {len(done)})")
+    categories = pd.read_csv(
+        CATEGORIES_FILE,
+        dtype={"category_id": "string"},
+        low_memory=False,
+    )
+    required_columns = {"category_id", "name", "src", "urlKey"}
+    if not required_columns.issubset(categories.columns):
+        raise ValueError(
+            f"File category.csv phải có các cột: {sorted(required_columns)}; "
+            f"hiện có: {list(categories.columns)}"
+        )
 
-    for _, cat in categories.iterrows():
-        category_id = int(cat["category_id"])
-        params = {"category": category_id, "src": cat["src"], "urlKey": cat["urlKey"]}
-        rows, seen, ok = [], set(), True
+    categories = (
+        categories.dropna(subset=["category_id"])
+        .drop_duplicates("category_id")
+        .reset_index(drop=True)
+    )
+    categories["category_id"] = categories["category_id"].str.strip()
+
+    print(f"Tổng danh mục cần quét lại: {len(categories)}")
+
+    for cat_index, cat in categories.iterrows():
+        category_id = str(cat["category_id"]).strip()
+        params = {
+            "category": category_id,
+            "src": cat["src"],
+            "urlKey": cat["urlKey"],
+        }
+        rows = []
+        seen_products = set()
+        seen_pages = set()
+        reached_end = False
+
+        print(f"\n[{cat_index + 1}/{len(categories)}] Bắt đầu crawl: {cat['name']}")
 
         try:
             for page in range(1, 101):
                 params["page"] = page
                 try:
                     records = fetch_listing(params)
-                except (requests.RequestException, ValueError, RuntimeError) as e:
-                    print(f"[LỖI] {cat['name']} trang {page}: {e}")
-                    ok = False
+                except (requests.RequestException, ValueError, RuntimeError) as exc:
+                    print(f"[LỖI] {cat['name']} trang {page}: {exc}")
                     break
 
-                new = [r for r in records if r.get("id") is not None and r["id"] not in seen]
-                if not new:
+                # Chỉ response có danh sách data rỗng mới xác nhận hết danh mục.
+                if not records:
+                    reached_end = True
+                    print(f"  Trang {page}: hết dữ liệu.")
                     break
-                for r in new:
-                    seen.add(r["id"])
+
+                page_signature = tuple(
+                    (str(item.get("id")), str(item.get("seller_product_id")))
+                    for item in records if isinstance(item, dict)
+                )
+                if page_signature and page_signature in seen_pages:
+                    print(
+                        f"[CẢNH BÁO] {cat['name']} trang {page}: "
+                        "API trả lại trang lặp; dừng danh mục để tránh lặp vô hạn."
+                    )
+                    break
+                if page_signature:
+                    seen_pages.add(page_signature)
+
+                new_count = 0
+                for item in records:
+                    if not isinstance(item, dict):
+                        continue
+                    product_id = item.get("id")
+                    if product_id is None:
+                        continue
+                    product_id = str(product_id).strip()
+                    if not product_id:
+                        continue
+
+                    seller_product_id = item.get("seller_product_id")
+                    seller_product_id = (
+                        str(seller_product_id).strip()
+                        if seller_product_id is not None else None
+                    )
+                    # Dùng cặp ID để không làm mất các seller_product_id khác nhau.
+                    product_key = (product_id, seller_product_id)
+                    if product_key in seen_products:
+                        continue
+                    seen_products.add(product_key)
+                    new_count += 1
                     rows.append({
-                        "product_id": r["id"],
-                        "seller_product_id": r.get("seller_product_id"),
+                        "product_id": product_id,
+                        "seller_product_id": seller_product_id,
                         "category_id": category_id,
                         "crawl_date": CRAWL_DATE,
                     })
+
                 if len(rows) >= SAVE_EVERY:
                     save_listing(rows)
-                time.sleep(random.uniform(3, 6))
+
+                print(
+                    f"  Trang {page}: {len(records)} bản ghi API, "
+                    f"{new_count} cặp sản phẩm/người bán mới trong lần quét này"
+                )
+                time.sleep(random.uniform(*REQUEST_DELAY))
             else:
-                # Không đánh dấu xong nếu chạm ngưỡng trang mà chưa thấy trang kết thúc.
-                ok = False
-                print(f"[CẢNH BÁO] {cat['name']} đã chạm giới hạn 100 trang; sẽ tiếp tục ở lần chạy sau.")
+                print(
+                    f"[CẢNH BÁO] {cat['name']} đã chạm giới hạn 100 trang; "
+                    "lần chạy sau sẽ quét lại từ đầu."
+                )
         finally:
+            # Lưu phần còn trong bộ nhớ kể cả khi có lỗi hoặc dừng chương trình.
             save_listing(rows)
 
-        if ok:
-            done.add(category_id)
-            LISTING_CHECKPOINT_FILE.write_text(
-                json.dumps({
-                    "crawl_month": CRAWL_DATE,
-                    "completed_category_ids": sorted(done),
-                }, indent=2),
-                encoding="utf-8",
+        status = "HOÀN TẤT" if reached_end else "CHƯA ĐẦY ĐỦ"
+        print(
+            f"[{status}] {cat['name']}: "
+            f"{len(seen_products):,} cặp product_id/seller_product_id đã thấy"
+        )
+
+    # Dedupe dữ liệu đã lưu; không xóa dữ liệu của những lần crawl trước.
+    if INPUT_FILE.exists() and INPUT_FILE.stat().st_size > 0:
+        df = pd.read_csv(INPUT_FILE, dtype=str, low_memory=False)
+        for col in LISTING_COLUMNS:
+            if col not in df.columns:
+                df[col] = pd.NA
+        for col in LISTING_COLUMNS:
+            df[col] = df[col].map(
+                lambda value: value.replace("\ufeff", "").strip()
+                if isinstance(value, str) else value
             )
-
-        print(f"Crawl: {cat['name']} - {len(seen)} product_id" + ("" if ok else " (CHƯA ĐẦY ĐỦ)"))
-
-    # Dedupe cuối file
-    if INPUT_FILE.exists():
-        df = pd.read_csv(INPUT_FILE, dtype=str).drop_duplicates()
+        df = df[LISTING_COLUMNS].drop_duplicates(
+            subset=["product_id", "seller_product_id", "category_id", "crawl_date"],
+            keep="last",
+        )
         df.to_csv(INPUT_FILE, index=False, encoding="utf-8-sig")
+        print(f"\nTổng số dòng sau dedupe: {len(df):,}")
 
-    print("\nHoàn tất crawl danh sách product_id!")
-
+    print("\nHoàn tất tiến trình crawl danh sách product_id!")
 
 # # 2. Crawl chi tiết
 
@@ -172,11 +288,14 @@ def read_product_ids():
     if not INPUT_FILE.exists():
         raise FileNotFoundError(f"Không tìm thấy: {INPUT_FILE}")
 
-    df = pd.read_csv(
-        INPUT_FILE,
-        dtype={"product_id": "string", "seller_product_id": "string", "crawl_date": "string"},
-        low_memory=False,
-    )
+    try:
+        df = pd.read_csv(
+            INPUT_FILE,
+            dtype={"product_id": "string", "seller_product_id": "string", "crawl_date": "string"},
+            low_memory=False,
+        )
+    except pd.errors.EmptyDataError as exc:
+        raise ValueError(f"File đầu vào rỗng: {INPUT_FILE}") from exc
     required = {"product_id", "seller_product_id"}
     if not required.issubset(df.columns):
         raise ValueError(f"File đầu vào phải có các cột: {required}")
@@ -245,7 +364,7 @@ def created_date(day_ago):
         return None
     try:
         return (
-            pd.Timestamp.now().normalize() - pd.Timedelta(days=float(day_ago))
+            CRAWL_TIMESTAMP.normalize() - pd.Timedelta(days=float(day_ago))
         ).strftime("%Y-%m-%d")
     except (ValueError, TypeError):
         return None
@@ -487,6 +606,8 @@ def main():
 
     status_text = "DỪNG SỚM do bị chặn (chạy lại sau để tiếp tục)" if stopped else "Hoàn tất"
     print(f"\n{status_text}: thành công {ok_count}, lỗi {err_count}")
+    if stopped:
+        sys.exit(1)
 
 if __name__ == "__main__":
     crawl_product_ids()

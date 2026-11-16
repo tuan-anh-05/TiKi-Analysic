@@ -80,9 +80,11 @@ def clean_reviews(input_file: Path, output_file: Path, chunksize: int = 150000) 
         chunk = chunk.loc[is_new].copy()
         seen_review_keys.update(key for key, keep in zip(chunk_keys, is_new) if keep)
 
-        # 3. Chuẩn hóa điểm đánh giá (rating)
-        chunk["rating"] = pd.to_numeric(chunk["rating"], errors="coerce").fillna(5).astype("int64")
-        chunk["rating"] = chunk["rating"].clip(lower=1, upper=5)
+        # 3. Chuẩn hóa điểm đánh giá (rating): loại bỏ dòng thiếu rating hoặc ngoài khoảng 1-5
+        chunk["rating"] = pd.to_numeric(chunk["rating"], errors="coerce")
+        chunk = chunk.dropna(subset=["rating"])
+        chunk = chunk[chunk["rating"].between(1, 5)]
+        chunk["rating"] = chunk["rating"].round().astype("int64")
 
         # 4. Chuẩn hóa chuỗi văn bản (title, content)
         for text_col in ["title", "content"]:

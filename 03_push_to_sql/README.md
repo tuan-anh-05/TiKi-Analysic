@@ -1,57 +1,87 @@
-# Supabase PostgreSQL và Power BI (Load / Gold)
+# Tầng Kho Dữ Liệu & Phân Tích (Gold / Load Layer)
 
-Phần này nhận CSV sạch từ `02_process_raw_data/`, nạp incremental vào Supabase PostgreSQL và cung cấp bảng/view cho BI. Airflow gọi loader sau preprocessing; MinIO giữ CSV silver và checkpoint ở `current/state/`. PostgreSQL trong Docker là metadata Airflow riêng, không phải database này.
+Thư mục này chịu trách nhiệm nạp dữ liệu sạch từ tầng Silver (`02_process_raw_data/`) vào cơ sở dữ liệu **Supabase PostgreSQL** theo mô hình kho dữ liệu **Star Schema**, cung cấp các bảng Fact, Dimension và Analytical Views tối ưu hóa cho **Power BI Desktop** và phân tích kinh doanh (Business Intelligence).
 
-## Nội dung thư mục
+---
 
-- [`create_database/create_tables_postgres.sql`](create_database/create_tables_postgres.sql): bảng, khóa, index và hai view.
-- [`push_to_sql/push_to_database.py`](push_to_sql/push_to_database.py): tạo schema nếu thiếu, lọc khóa đã tồn tại và chèn bản ghi mới.
-- `sync_checkpoint_supabase.json`: tiến độ/checkpoint local; trong luồng Airflow được sync vào MinIO. Không commit secrets hoặc checkpoint sinh ra.
-- `push_to_sql/logs/`: log loader.
+## 1. Cấu trúc Thư Mục
 
-## Quy tắc nạp
+* [`create_tables_postgres.sql`](create_tables_postgres.sql): Tệp DDL định nghĩa toàn bộ cấu trúc bảng vật lý, khóa chính, khóa ngoại, chỉ mục (Indexes), ràng buộc kiểm tra (Check Constraints) và các View phân tích.
+* [`push_to_database.py`](push_to_database.py): Script thực thi tiến trình nạp dữ liệu thông minh (Smart Incremental Loader) với cơ chế bảo đảm an toàn và không gây trùng lặp.
+* `sync_checkpoint_supabase.json`: Tệp lưu vết tiến độ đồng bộ (thời gian nạp gần nhất, danh sách ngày giá đã nạp, số lượng khóa review). Được adapter tự động đồng bộ lên MinIO (`current/state/`).
+* `logs/`: Thư mục lưu vết nhật ký chi tiết của từng phiên nạp dữ liệu.
 
-| Bảng | Khóa so sánh để tìm dòng mới |
-|---|---|
-| `fact_daily_price` | `(product_id, seller_product_id, crawl_date)` |
-| `dim_product_listing` | `(product_id, seller_product_id, category_id, crawl_date)` |
-| `product_detail` | `(product_id, crawl_date)` |
-| `product_seller` | `(product_id, seller_product_id, seller_id, crawl_date)`; seller NULL được chuẩn hóa trong unique index. |
-| `product_category_map` | `(product_id, category_id, crawl_date)` |
-| `fact_review` | `(review_id, product_id, seller_product_id)`; `seller_id` không bắt buộc và không thuộc khóa. |
+---
 
-Loader đọc các khóa trong target trước khi insert. Unique key và `ON CONFLICT DO NOTHING` bảo vệ lần chạy lặp/retry sau khi nạp dở. Daily price, product snapshot và review không tự cập nhật lại dòng cùng key; `dim_product` được làm mới từ snapshot mới nhất. Category là dữ liệu tĩnh, chỉ nạp một lần theo checkpoint; nếu DB rỗng nhưng checkpoint cũ thì loader cho phép nạp lại.
+## 2. Quy Tắc Nạp Dữ Liệu Thông Minh (Smart Incremental Load)
 
-## Từ điển dữ liệu
-
-Định nghĩa chính xác về grain, cột và ý nghĩa từng bảng nằm trong [README tổng](../README.md#mo-hinh-du-lieu-bang-dong-cot); SQL schema là nguồn chính thức về kiểu dữ liệu/constraint.
-
-| Bảng/view | Grain / nội dung |
-|---|---|
-| `dim_category` | Một dòng mỗi category Tiki. |
-| `dim_sub_category` | Đường phân cấp subcategory dưới category cha. |
-| `dim_product_listing` | Sản phẩm/variant xuất hiện trong category ở snapshot tháng. |
-| `product_detail` | Thuộc tính sản phẩm mỗi tháng snapshot; giữ lịch sử. |
-| `dim_product` | Thuộc tính snapshot mới nhất, một dòng mỗi product ID. |
-| `product_seller` | Quan hệ offer/seller theo tháng snapshot. |
-| `product_category_map` | Quan hệ product-category theo tháng snapshot. |
-| `fact_daily_price` | Giá/chỉ số một product variant trong một ngày crawl. |
-| `fact_review` | Một review theo ID review + product + variant. |
-| `vw_daily_price_analysis` | Daily price bổ sung tên/brand/type từ `dim_product`. |
-| `vw_review_analysis` | Review bổ sung tên/brand/type từ `dim_product`. |
-
-## Kết nối Power BI
-
-Power BI Desktop → **Get data → PostgreSQL database**; lấy host/port/user/database từ Supabase → **Connect**. Database thường `postgres`; bật SSL mode `Require`; dùng DB password. Nên chọn **Import** để hạn chế kết nối mở lâu. Bắt đầu với hai view analysis, tạo biểu đồ giá theo ngày/brand, chiết khấu, rating/review, rồi **Refresh** sau khi Airflow loader thành công. Nếu cổng direct không dùng được, lấy thông số pooler trong Supabase Connect. Pooler có giới hạn kết nối nên tránh mở nhiều DirectQuery/session cùng lúc.
-
-## Tạo schema và chạy loader
-
-Tạo schema một lần bằng SQL Editor Supabase với [`create_tables_postgres.sql`](create_database/create_tables_postgres.sql). Loader cũng thực thi DDL trước khi nạp. `CREATE TABLE IF NOT EXISTS` không migration bảng cũ; so sánh cấu trúc trước khi nâng cấp schema.
-
-Trong Compose, dùng task Airflow `push` (task này chạy preprocess trước). Có thể chạy loader trực tiếp từ root nếu cài requirements và cung cấp `SUPABASE_DB_URL`:
-
-```bash
-python 03_push_to_sql/push_to_sql/push_to_database.py
+```mermaid
+flowchart TD
+    Silver["Silver CSVs (02_process_raw_data)"] --> RuleEngine{"Quy tắc lọc chống trùng"}
+    
+    RuleEngine -->|Rule 1: Category| CatCheck{"Đã có trong DB?"}
+    CatCheck -->|Chưa có| LoadCat["Nạp dim_category & dim_sub_category"]
+    CatCheck -->|Đã có| SkipCat["Skip (Chỉ nạp 1 lần)"]
+    
+    RuleEngine -->|Rule 2: Daily Price| PriceCheck{"So sánh khóa ngày"}
+    PriceCheck --> LoadPrice["Nạp fact_daily_price<br/>(ON CONFLICT DO NOTHING)"]
+    
+    RuleEngine -->|Rule 3: Product Snapshot| ProdCheck{"So sánh khóa tháng"}
+    ProdCheck --> LoadProd["Nạp snapshot product, seller, category_map<br/>& UPSERT vào dim_product (SCD1)"]
+    
+    RuleEngine -->|Rule 4: Review| RevCheck{"So sánh bộ 3 khóa kết hợp"}
+    RevCheck --> LoadRev["Nạp fact_review<br/>(ON CONFLICT DO NOTHING)"]
+    
+    LoadCat & LoadPrice & LoadProd & LoadRev --> Views["3 Analytical Views<br/>(vw_product_performance, vw_daily_price, vw_review)"]
+    Views --> PowerBI["Power BI Dashboard"]
 ```
 
-Từ repo root dùng `.env` ở `04_orchestration/airflow/.env` hoặc export connection URL cho tiến trình. Không để connection string chứa password trong shell history công khai hoặc source control.
+Script `push_to_database.py` áp dụng cơ chế nạp gia tăng với **4 quy tắc lọc chống trùng** khắt khe:
+
+| Nhóm dữ liệu | Bảng đích (PostgreSQL) | Cơ chế so sánh & nạp an toàn |
+|---|---|---|
+| **1. Category** | `dim_category`<br/>`dim_sub_category` | **Chỉ nạp 1 lần duy nhất**: Kiểm tra trạng thái trong checkpoint và kiểm tra dữ liệu hiện có trong bảng. Nếu đã có dữ liệu, script tự động bỏ qua để tiết kiệm tài nguyên. |
+| **2. Daily Price** | `fact_daily_price` | **Đối chiếu từng khóa với Database**: Đọc danh sách khóa `(product_id, seller_product_id, crawl_date)` từ database về bộ nhớ, chỉ nạp các dòng có khóa mới. Chèn dữ liệu bằng lệnh `ON CONFLICT DO NOTHING`. |
+| **3. Monthly Snapshot** | `dim_product_listing`<br/>`product_detail`<br/>`product_seller`<br/>`product_category_map`<br/>`dim_product` | **So sánh snapshot tháng**: Đối chiếu các khóa snapshot theo tháng (`YYYY-MM`). Sau khi nạp lịch sử vào `product_detail`, script tự động chạy câu lệnh `UPSERT` để cập nhật trạng thái mới nhất của từng sản phẩm vào Dimension `dim_product` (SCD Type 1). |
+| **4. Review** | `fact_review` | **Lọc theo bộ 3 khóa kết hợp (Composite Key)**: Lọc chính xác theo `(review_id, product_id, seller_product_id)`. Đảm bảo độ chính xác tuyệt đối, không bao giờ bị nhận diện nhầm giữa các biến thể hoặc các gian hàng khác nhau. |
+
+> 🛡️ **Bảo đảm tính Idempotent**: Toàn bộ thao tác chèn bản ghi sử dụng phương thức `insert_ignore_conflicts` (`pg_insert().on_conflict_do_nothing()`). Nếu pipeline bị ngắt quãng và chạy lại, dữ liệu tuyệt đối không bao giờ bị nhân đôi dòng (duplicate rows).
+
+---
+
+## 3. Các View Phân Tích Dành Riêng Cho Power BI (Data Mart)
+
+Trong [`create_tables_postgres.sql`](create_tables_postgres.sql) đã xây dựng sẵn 3 View phân tích chuyên sâu:
+
+1. **`vw_product_performance`**: Bảng tổng hợp hiệu suất toàn diện cho Dashboard Executive Summary.
+   * Cung cấp: Doanh thu ước tính (`all_time_quantity_sold * price`), sản lượng bán, giá bán mới nhất, giá niêm yết, tỷ lệ giảm giá, tên thương hiệu, tên ngành hàng.
+2. **`vw_daily_price_analysis`**: Bảng theo dõi xu hướng biến động giá theo thời gian.
+   * Cung cấp: Giá bán hàng ngày, giá niêm yết, discount, discount rate kết hợp với tên sản phẩm, thương hiệu và ngành hàng cha.
+3. **`vw_review_analysis`**: Bảng phân tích trải nghiệm và đánh giá của khách hàng.
+   * Cung cấp: Điểm rating (1-5 sao), tiêu đề, nội dung review, cờ xác thực mua hàng (`purchased`), cờ có ảnh (`is_photo`), số lượt cảm ơn (`thank_count`), tên sản phẩm và thương hiệu.
+
+---
+
+## 4. Kết Nối Power BI Desktop & Xây Dựng Báo Cáo
+
+1. Mở **Power BI Desktop** ➔ Chọn **Get data** ➔ **PostgreSQL database**.
+2. Lấy thông tin kết nối từ Supabase Dashboard (**Project Settings ➔ Database ➔ Connection String**):
+   * **Server**: `<db.project-id.supabase.co>:<port>`
+   * **Database**: `postgres`
+   * **Data Connectivity mode**: Chọn **Import** (khuyến nghị chế độ Import để tăng tốc độ truy vấn, hạn chế mở kết nối kéo dài tới database).
+3. Đăng nhập bằng tài khoản và mật khẩu của database Supabase.
+4. Chọn 3 View phân tích (`vw_product_performance`, `vw_daily_price_analysis`, `vw_review_analysis`) hoặc chọn các bảng Dimension/Fact để tự xây dựng mối quan hệ trong Data Model view.
+5. Nhấn **Refresh** trên thanh công cụ bất kỳ lúc nào để cập nhật dữ liệu mới nhất sau khi Airflow chạy xong.
+
+---
+
+## 5. Hướng Dẫn Chạy Thủ Công
+
+Đứng từ thư mục gốc của repository, đảm bảo biến môi trường `SUPABASE_DB_URL` đã được cấu hình trong tệp `.env`:
+
+```bash
+# Thực thi nạp toàn bộ dữ liệu sạch từ 02_process_raw_data lên Supabase
+python 03_push_to_sql/push_to_database.py
+```
+
+> 💡 Trong môi trường tự động hóa, task này tương ứng với task `load_new_rows_to_supabase` trong cả 2 DAG của Airflow, và luôn được bảo vệ bởi Airflow Pool `tiki_sync_pool` (1 slot) để đảm bảo không bị ghi đè dữ liệu đồng thời.
