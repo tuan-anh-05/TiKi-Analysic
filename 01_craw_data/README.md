@@ -27,7 +27,7 @@ flowchart LR
 |---|---|---|---|---|
 | **Category** | `category/crawl_category.py` | Tiki Category API | `category.csv`<br/>`sub_category.csv` | Danh mục gốc (cấp 1) và cây phân cấp danh mục con (cấp 1 đến cấp 5). Nguồn dữ liệu tương đối tĩnh, crawl khi khởi tạo hệ thống. |
 | **Product** | `product/crawl_product.py` | `category/category.csv` | `product.csv`<br/>`product_detail.csv`<br/>`product_seller.csv`<br/>`product_category.csv` | **Snapshot theo tháng (`YYYY-MM`)**:<br/>- `product.csv`: Danh sách cặp `(product_id, seller_product_id)`.<br/>- `product_detail.csv`: Thuộc tính chi tiết (SKU, brand, rating, sold).<br/>- `product_seller.csv`: Gian hàng, giá bán, cờ `is_best_store`.<br/>- `product_category.csv`: Cây breadcrumb liên kết sản phẩm - danh mục. |
-| **Daily Price** | `daily_price/crawl_daily_price.py`<br/>`daily_price/recovery.py` | `daily_price/product_pareto.csv` | `daily_price_history.csv`<br/>`crawl_daily_log.csv` | **Lịch sử biến động giá theo ngày (`YYYY-MM-DD`)** của các sản phẩm trọng tâm (Pareto 80/20). Ghi nhận giá bán, giá niêm yết, tỷ lệ giảm giá và tồn kho. |
+| **Daily Price** | `daily_price/crawl_daily_price.py`<br/>`daily_price/recovery.py` | `daily_price/product_pareto.csv` | `daily_price_history.csv`<br/>`crawl_daily_log.csv` *(tự sinh khi có lỗi)* | **Lịch sử biến động giá theo ngày (`YYYY-MM-DD`)** của các sản phẩm trọng tâm (Pareto 80/20). Ghi nhận giá bán, giá niêm yết, tỷ lệ giảm giá và tồn kho (`crawl_daily_log.csv` lưu vết lỗi tạm thời để phục vụ lượt crawl bù 21h). |
 | **Review** | `review/crawl_review.py` | `product/product_detail.csv`<br/>`product/product_seller.csv` | `product_review.csv` | Đánh giá khách hàng lũy kế. Nhận diện duy nhất bằng bộ ba khóa: `(review_id, product_id, seller_product_id)`. |
 
 ---

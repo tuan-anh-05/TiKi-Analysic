@@ -40,13 +40,26 @@ Script điều phối tổng [`run_all_preprocessing.py`](run_all_preprocessing.
 
 ## 3. Kiểm Định Hợp Đồng Dữ Liệu (Data Contract Validation)
 
-Script [`validate_silver.py`](validate_silver.py) là **chốt chặn chất lượng dữ liệu** bắt buộc trước khi dữ liệu được phép nạp vào kho Gold (PostgreSQL). Nó kiểm tra 8 hợp đồng dữ liệu nghiêm ngặt:
+Script [`validate_silver.py`](validate_silver.py) là **chốt chặn chất lượng dữ liệu** bắt buộc trước khi dữ liệu được phép nạp vào kho Gold (PostgreSQL). Hệ thống áp dụng **5 quy tắc kiểm định tiêu chuẩn** trên **8 hợp đồng dữ liệu (Data Contracts)** đại diện cho 8 tệp CSV tầng Silver:
 
-1. **Required Columns**: Đầy đủ các cột bắt buộc theo schema.
-2. **Key Integrity**: Cột khóa không được phép chứa giá trị rỗng (Null/Blank).
-3. **Uniqueness**: Không có bất kỳ bản ghi nào bị trùng lặp khóa chính / khóa duy nhất.
-4. **Format Dates**: Cột ngày phải đúng định dạng (`YYYY-MM-DD` cho Daily Price, `YYYY-MM` cho Product snapshot).
-5. **Value Range**: Kiểm tra khoảng giá trị hợp lệ (ví dụ: `price > 0`, `rating BETWEEN 1 AND 5`, `discount_rate BETWEEN 0 AND 100`).
+### 5 Quy tắc kiểm định cốt lõi:
+1. **Required Columns**: Kiểm tra sự hiện diện đầy đủ của các cột bắt buộc theo schema.
+2. **Key Integrity**: Cột khóa chính / khóa ngoại không được phép chứa giá trị rỗng (Null/Blank).
+3. **Uniqueness**: Đảm bảo không có bản ghi nào bị trùng lặp khóa chính hoặc bộ khóa kết hợp (Composite Key).
+4. **Date Formats**: Cột ngày tháng phải tuân thủ đúng định dạng chuẩn ISO (`YYYY-MM-DD` cho Daily Price, `YYYY-MM` cho snapshot Product).
+5. **Value Range**: Kiểm tra các giá trị số học nằm trong khoảng hợp lệ (ví dụ: `price > 0`, `rating BETWEEN 1 AND 5`, `discount_rate BETWEEN 0 AND 100`).
+
+### Danh sách chi tiết 8 Hợp đồng Dữ liệu (8 Data Contracts):
+| STT | Tên hợp đồng (Tệp CSV Silver) | Khóa định danh kiểm tra | Ràng buộc kiểm định cụ thể |
+|:---:|---|---|---|
+| **1** | `category/category.csv` | `category_id` (PK) | Cột bắt buộc: `category_id`, `name`; Khóa không rỗng; Duy nhất 100%. |
+| **2** | `category/sub_category.csv` | `category_id` (FK) | Cột bắt buộc: `category_id`, `category_name`; Khóa tham chiếu không rỗng. |
+| **3** | `daily_price/daily_price_history.csv` | `(product_id, seller_product_id, crawl_date)` | Duy nhất bộ 3 khóa kết hợp; Ngày định dạng `YYYY-MM-DD`; `price > 0`, `discount_rate ∈ [0, 100]`, `rating_average ∈ [0, 5]`. |
+| **4** | `product/product.csv` | `(product_id, seller_product_id, category_id, crawl_date)` | Duy nhất bộ 4 khóa kết hợp; Snapshot định dạng `YYYY-MM`; Khóa không rỗng. |
+| **5** | `product/product_detail.csv` | `(product_id, crawl_date)` | Duy nhất cặp khóa `(product_id, crawl_date)`; Snapshot `YYYY-MM`; `rating_average ∈ [0, 5]`. |
+| **6** | `product/product_seller.csv` | `(product_id, seller_product_id, seller_id, crawl_date)` | Khóa bắt buộc không rỗng `(product_id, seller_product_id, crawl_date)`; Snapshot `YYYY-MM`. |
+| **7** | `product/product_category.csv` | `(product_id, category_id, crawl_date)` | Duy nhất bộ 3 khóa; Snapshot định dạng `YYYY-MM`; Khóa không rỗng. |
+| **8** | `review/product_review.csv` | `(review_id, product_id, seller_product_id)` | Duy nhất bộ 3 khóa kết hợp; Điểm đánh giá bắt buộc `rating ∈ [1, 5]`. |
 
 > ⚠️ **Quy tắc chặn**: Nếu bất kỳ tệp CSV nào vi phạm hợp đồng, `validate_silver.py` sẽ **báo lỗi và thoát với mã `SystemExit(1)`**, chặn toàn bộ quá trình Promote dữ liệu lên MinIO và ngăn chặn nạp dữ liệu rác vào Supabase.
 

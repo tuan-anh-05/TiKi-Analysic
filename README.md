@@ -223,15 +223,15 @@ TiKi-Analysic/
 ├── 03_push_to_sql/                # Tầng Gold: Load dữ liệu lên Cloud Database
 │   ├── create_tables_postgres.sql # DDL tạo schema Star Schema và Analytical Views
 │   ├── push_to_database.py        # Smart Incremental Loader (ON CONFLICT DO NOTHING)
-│   └── sync_checkpoint_supabase.json # Checkpoint kiểm soát trạng thái đồng bộ
+│   └── sync_checkpoint_supabase.json # Checkpoint kiểm soát trạng thái đồng bộ (tự động sinh trong runtime)
 │
-├── 04_orchestration/airflow/      # Điều phối Pipeline tự động hóa
-│   ├── dags/
+├── 04_orchestration/airflow/      # Trung tâm điều phối tự động (Airflow + MinIO + Docker)
+│   ├── dags/                      # Thư mục chứa các DAG lập lịch
 │   │   ├── tiki_product_monthly.py   # DAG chạy ngày 1 hàng tháng (Timeout 144h)
-│   │   ├── tiki_pipeline.py          # DAG chạy hàng ngày (03h, 09h, 14h, 21h)
+│   │   ├── tiki_pipeline.py          # DAG chạy hàng ngày tiki_extract_transform_load (03h, 09h, 14h, 21h)
 │   │   └── schedule_rules.py         # Logic chọn task crawl theo khung giờ
 │   ├── scripts/minio_task.py         # S3 Adapter quản lý Staging & Promotion trên MinIO
-│   └── docker-compose.yml            # Docker stack: Airflow 2.10.5, Postgres, MinIO AIStor
+│   └── docker-compose.yml            # Hạ tầng Docker: Airflow 2.10.5, Postgres, MinIO S3 Lakehouse
 │
 ├── notebooks/                     # Thư mục Jupyter Notebooks thử nghiệm và phân tích
 ├── tests/                         # Bộ 16 Unit Tests kiểm thử chất lượng và tính toàn vẹn
@@ -249,22 +249,22 @@ TiKi-Analysic/
 
 ---
 
-## 6. Lập lịch điều phối (Airflow Orchestration)
+## 6. Lập lịch điều phối (Airflow Orchestration on Docker & MinIO)
 
-Pipeline được chia tách thành **2 DAG độc lập** kết hợp với **Airflow Pool (1 slot)** để giải quyết triệt để vấn đề thời gian crawl lớn và xung đột tài nguyên:
+Hệ thống được thiết kế và vận hành thống nhất bằng **Apache Airflow 2.10.5** kết hợp **MinIO S3 Lakehouse** chạy trên **Docker Compose** (nằm tại [`04_orchestration/airflow/`](04_orchestration/airflow/)). Hệ thống phân tách thành **2 DAG độc lập** kết hợp với **Airflow Pool (1 slot)** để giải quyết triệt để thời gian crawl kéo dài và triệt tiêu xung đột tài nguyên:
 
 1. **DAG `tiki_product_monthly`**:
    - **Lịch**: `0 2 1 * *` (02:00 ngày 1 hàng tháng).
    - **Timeout**: `144h` (6 ngày), retries = 1. Quét sâu toàn bộ danh mục và crawl chi tiết tất cả sản phẩm trong tháng.
-   - **Luồng**: `crawl_monthly_product_full >> run_preprocessing >> validate_silver >> load_supabase`.
-2. **DAG `tiki_extract_transform_load` (Daily Pipeline)**:
+   - **Luồng**: `crawl_monthly_product_full >> run_preprocessing >> validate_silver_data >> load_new_rows_to_supabase`.
+2. **DAG `tiki_extract_transform_load` (Daily Pipeline - định nghĩa trong `tiki_pipeline.py`)**:
    - **Lịch**: `0 3,9,14,21 * * *` (giờ Việt Nam).
      - `03:00`: Crawl sản phẩm mới xuất hiện (Tự động skip nếu monthly crawl đang chạy).
      - `09:00`: Crawl review mới phát sinh.
      - `14:00` & `21:00`: Crawl giá hàng ngày và đối soát/bổ sung lỗi.
-   - **Luồng**: `extract_complete >> run_preprocessing >> validate_silver >> load_supabase`.
+   - **Luồng**: `extract_complete >> run_preprocessing >> validate_silver_data >> load_new_rows_to_supabase`.
 3. **Cơ chế chống xung đột bằng Pool (`tiki_sync_pool`)**:
-   - Khởi tạo pool với đúng **1 slot** trong Airflow. Cả 3 task `run_preprocessing`, `validate_silver` và `load_supabase` ở cả 2 DAG đều gắn pool này.
+   - Khởi tạo pool với đúng **1 slot** trong Airflow. Cả 3 task `run_preprocessing`, `validate_silver_data` và `load_new_rows_to_supabase` ở cả 2 DAG đều gắn pool này.
    - Khi cả 2 DAG cùng đến bước nạp dữ liệu, task đến trước sẽ giữ slot, task đến sau tự động xếp hàng chờ, **loại bỏ 100% rủi ro race condition trên MinIO và Supabase**.
 
 ---
@@ -310,6 +310,18 @@ python -m unittest discover -s tests -v
 python 02_process_raw_data/validate_silver.py
 # Kết quả: 8/8 Data Contracts PASSED
 ```
+
+#### Chi tiết 8 Hợp đồng Dữ liệu (8 Data Contracts) được xác thực:
+| STT | Tên hợp đồng (Tệp CSV Silver) | Khóa định danh kiểm tra | Tiêu chuẩn chất lượng (5 Validation Rules) |
+|:---:|---|---|---|
+| **1** | `category/category.csv` | `category_id` (PK) | Cột bắt buộc: `category_id`, `name`; Khóa không rỗng; Duy nhất 100%. |
+| **2** | `category/sub_category.csv` | `category_id` (FK) | Cột bắt buộc: `category_id`, `category_name`; Khóa tham chiếu không rỗng. |
+| **3** | `daily_price/daily_price_history.csv` | `(product_id, seller_product_id, crawl_date)` | Duy nhất bộ 3 khóa kết hợp; Ngày định dạng `YYYY-MM-DD`; `price > 0`, `discount_rate ∈ [0, 100]`, `rating_average ∈ [0, 5]`. |
+| **4** | `product/product.csv` | `(product_id, seller_product_id, category_id, crawl_date)` | Duy nhất bộ 4 khóa kết hợp; Snapshot định dạng `YYYY-MM`; Khóa không rỗng. |
+| **5** | `product/product_detail.csv` | `(product_id, crawl_date)` | Duy nhất cặp khóa `(product_id, crawl_date)`; Snapshot `YYYY-MM`; `rating_average ∈ [0, 5]`. |
+| **6** | `product/product_seller.csv` | `(product_id, seller_product_id, seller_id, crawl_date)` | Khóa bắt buộc không rỗng `(product_id, seller_product_id, crawl_date)`; Snapshot `YYYY-MM`. |
+| **7** | `product/product_category.csv` | `(product_id, category_id, crawl_date)` | Duy nhất bộ 3 khóa; Snapshot định dạng `YYYY-MM`; Khóa không rỗng. |
+| **8** | `review/product_review.csv` | `(review_id, product_id, seller_product_id)` | Duy nhất bộ 3 khóa kết hợp; Điểm đánh giá bắt buộc `rating ∈ [1, 5]`. |
 
 ---
 

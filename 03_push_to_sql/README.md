@@ -8,7 +8,7 @@ Thư mục này chịu trách nhiệm nạp dữ liệu sạch từ tầng Silve
 
 * [`create_tables_postgres.sql`](create_tables_postgres.sql): Tệp DDL định nghĩa toàn bộ cấu trúc bảng vật lý, khóa chính, khóa ngoại, chỉ mục (Indexes), ràng buộc kiểm tra (Check Constraints) và các View phân tích.
 * [`push_to_database.py`](push_to_database.py): Script thực thi tiến trình nạp dữ liệu thông minh (Smart Incremental Loader) với cơ chế bảo đảm an toàn và không gây trùng lặp.
-* `sync_checkpoint_supabase.json`: Tệp lưu vết tiến độ đồng bộ (thời gian nạp gần nhất, danh sách ngày giá đã nạp, số lượng khóa review). Được adapter tự động đồng bộ lên MinIO (`current/state/`).
+* `sync_checkpoint_supabase.json`: Tệp lưu vết tiến độ đồng bộ (thời gian nạp gần nhất, danh sách ngày giá đã nạp, số lượng khóa review; tự động khởi tạo khi chạy và được adapter đồng bộ lên MinIO `current/state/`).
 * `logs/`: Thư mục lưu vết nhật ký chi tiết của từng phiên nạp dữ liệu.
 
 ---

@@ -292,7 +292,7 @@ def push_incremental_postgres(project_dir: Path, data_root: Path, db_url: str, l
     conn.commit()
 
     # ==============================================================================
-    # QUY TẮC 4: Review - Lọc theo BỘ 4 KHÓA KẾT HỢP (COMPOSITE KEY)
+    # QUY TẮC 4: Review - Lọc theo BỘ 3 KHÓA KẾT HỢP (COMPOSITE KEY)
     # ==============================================================================
     log_msg(log_file, "\n[QUY TẮC 4] Kiểm tra dữ liệu Đánh giá (fact_review) theo BỘ 3 KHÓA KẾT HỢP:")
     log_msg(log_file, "  -> Khóa lọc kết hợp: [review_id + product_id + seller_product_id]")
@@ -365,7 +365,7 @@ def main():
     log_msg(log_file, "Chế độ: nạp gia tăng, chỉ thêm khóa chưa tồn tại trong PostgreSQL")
     log_msg(log_file, "=" * 60)
 
-    # Ưu tiên biến môi trường (GitHub Actions Secrets); nếu không có thì đọc .env local.
+    # Ưu tiên biến môi trường (Docker / Airflow env); nếu không có thì đọc .env local.
     db_url = os.environ.get("SUPABASE_DB_URL")
     if not db_url:
         env_file = project_dir / ".env"
