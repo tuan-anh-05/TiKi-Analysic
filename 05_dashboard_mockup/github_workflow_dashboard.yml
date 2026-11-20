@@ -1,0 +1,78 @@
+# Tự động dựng lại dashboard từ Supabase và đăng lên GitHub Pages.
+# Cách dùng: chép tệp này thành  .github/workflows/dashboard.yml  ở THƯ MỤC GỐC của kho GitHub.
+# Nếu thư mục dashboard của bạn không tên 05_dashboard thì sửa DASH_DIR bên dưới.
+name: Cập nhật dashboard
+
+on:
+  schedule:
+    # Cron tính theo giờ UTC: 16:00 UTC = 23:00 giờ Việt Nam (sau khi Airflow nạp xong và Supabase làm mới bảng tổng hợp)
+    - cron: "0 16 * * *"
+  workflow_dispatch:   # cho phép bấm chạy tay: tab Actions -> Cập nhật dashboard -> Run workflow
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: dashboard-pages
+  cancel-in-progress: true
+
+env:
+  DASH_DIR: 05_dashboard
+
+jobs:
+  build:
+    # Máy Windows dùng đúng Windows PowerShell 5.1 như máy của nhóm nên không phải sửa script
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tạo .env từ GitHub Secrets
+        shell: powershell
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: |
+          if (-not $env:SUPABASE_URL -or -not $env:SUPABASE_KEY) { throw "Thiếu secret SUPABASE_URL hoặc SUPABASE_KEY" }
+          "SUPABASE_URL=$env:SUPABASE_URL`r`nSUPABASE_KEY=$env:SUPABASE_KEY" | Set-Content -Path "$env:DASH_DIR\.env" -Encoding ASCII
+
+      - name: Dựng dashboard
+        shell: powershell
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File "$env:DASH_DIR\build.ps1" -NoOpen
+
+      - name: Kiểm tra kết quả
+        shell: powershell
+        run: |
+          $f = Join-Path $env:DASH_DIR "dashboard_v2.html"
+          if (-not (Test-Path $f) -or (Get-Item $f).Length -lt 1MB) { throw "dashboard_v2.html thiếu hoặc quá nhỏ" }
+          if (Select-String -Path $f -Pattern "sb_publishable|SUPABASE_KEY" -Quiet) { throw "Trang dashboard chứa khóa, dừng đăng" }
+
+      - name: Chuẩn bị trang
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force _site | Out-Null
+          Copy-Item "$env:DASH_DIR\dashboard_v2.html" "_site\index.html"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: site
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: site
+          path: _site
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,6 @@
+# Cấu hình Supabase (URL + key) — không commit
+.env
+
+# Tệp sinh ra khi dựng dashboard
+data.json
+dashboard_v2.html

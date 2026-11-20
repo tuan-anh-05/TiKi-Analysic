@@ -1,0 +1,24 @@
+﻿2026-11-17 17:29:57  Bắt đầu cập nhật
+2026-11-17 17:31:30  Thành công. [Supabase] products=46736 cats=25 brands=3469 daily=0 review_stars=19832 aspect=5644 daily_series=7999 size=4.93MB
+2026-11-17 23:00:04  Bắt đầu cập nhật
+2026-11-17 23:00:11  LỖI: data.json không được làm mới. Chi tiết: 1/2  Dang xu?t d? li?u t? Supabase...
+powershell.exe : Supabase l?i khi d?c 'vw_dash_product': The remote name could not be resolved: 
+'zboxcgedjpdozzmxwuzu.supabase.co'
+At C:\Users\Admin\Downloads\BC_TTTN\dashboard_mockup\update_dashboard.ps1:14 char:10
++   $out = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join- ...
++          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Supabase l?i kh...zu.supabase.co':String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+At C:\Users\Admin\Downloads\BC_TTTN\dashboard_mockup\supabase_client.ps1:33 char:27
++ ...       if ($try -ge 3) { throw "Supabase l?i khi d?c '$Table': $msg" }
++                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : OperationStopped: (Supabase l?i kh...zu.supabase.co':String) [], RuntimeException
+    + FullyQualifiedErrorId : Supabase l?i khi d?c 'vw_dash_product': The remote name could not be resolved: 'zboxcged 
+   jpdozzmxwuzu.supabase.co'
+ 
+
+2026-11-18 15:57:12  Bắt đầu cập nhật (lần 1/4)
+2026-11-18 15:58:53  Thành công. [Supabase] products=46736 cats=25 brands=3469 daily=0 review_stars=19832 aspect=5644 daily_series=7999 size=4.93MB
+2026-11-18 20:07:54  Bắt đầu cập nhật (lần 1/4)
+2026-11-18 20:10:28  Thành công. [Supabase] products=46736 cats=25 brands=3469 daily=0 review_stars=19832 aspect=5644 daily_series=7999 size=5.01MB

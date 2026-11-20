@@ -1,0 +1,1155 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tiki · Dashboard người bán</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ===================== MÀU & CHỮ ===================== */
+:root {
+  --side: #0B3D91; --side-2: #C9D6EE; --side-3: #AFC3E8;
+  --accent: #1A94FF; --bar: #1570D6; --bar-l: #D6E4F7; --bar-2: #A9B4C2;
+  --tiki: #0B5CAD; --chinhhang: #F28C28; --thuong: #7B8794;
+  --bad: #B42318; --bad-l: #FDE7E4; --bad-2: #F4A99F;
+  --good: #067647; --good-l: #E3F6EC;
+  --ink: #0B1F3A; --ink-2: #3D4A5C; --muted: #5B6675;
+  --line: #E3E8EF; --line-2: #EEF1F5; --card: #F7F9FC; --bg: #FFFFFF;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { font-family: 'Segoe UI', Inter, system-ui, sans-serif; color: var(--ink); background: var(--bg); }
+button, select, input { font-family: inherit; }
+.app { display: flex; height: 100vh; min-width: 1180px; }
+
+/* ===================== BÊN TRÁI (20%, tỉ lệ 2:8) ===================== */
+.side { width: 20%; max-width: 384px; min-width: 240px; flex: none; background: var(--side); color: #fff;
+        padding: 24px 22px 20px; display: flex; flex-direction: column; gap: 16px; overflow-y: auto; }
+.brand { display: flex; align-items: center; gap: 12px; }
+.logo { width: 44px; height: 44px; border-radius: 10px; background: var(--accent); display: flex; align-items: center; justify-content: center; flex: none; }
+.brand b { display: block; font-size: 17px; }
+.brand span { font-size: 12px; color: var(--side-2); }
+.purpose { font-size: 13px; line-height: 1.5; color: #E6EDF8; background: rgba(255,255,255,.08); border-radius: 10px; padding: 10px 12px; }
+.slabel { font-size: 11px; font-weight: 600; letter-spacing: 1.2px; text-transform: uppercase; color: var(--side-3); margin-bottom: -8px; }
+.nav { display: flex; flex-direction: column; gap: 6px; }
+.tab { display: flex; align-items: center; gap: 12px; min-height: 50px; padding: 8px 12px; border: 0; border-radius: 10px;
+       background: transparent; color: #fff; cursor: pointer; text-align: left; font-size: 15px; font-weight: 600; }
+.tab:hover { background: rgba(255,255,255,.08); }
+.tab .no { width: 34px; height: 34px; border-radius: 8px; background: rgba(255,255,255,.14); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; flex: none; }
+.tab.active { background: #fff; color: var(--side); }
+.tab.active .no { background: var(--side); color: #fff; }
+.divider { height: 1px; background: rgba(255,255,255,.2); }
+.seg { display: flex; gap: 6px; }
+.seg button { flex: 1; height: 38px; border-radius: 8px; border: 1px solid rgba(255,255,255,.35); background: transparent; color: #fff; font-weight: 600; cursor: pointer; }
+.seg button.active { background: #fff; color: var(--side); }
+.tool-l { font-size: 13px; margin-bottom: -8px; }
+.reset { height: 42px; border-radius: 10px; border: 1px solid rgba(255,255,255,.5); background: transparent; color: #fff; font-size: 13.5px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.reset:hover { background: rgba(255,255,255,.08); }
+.foot { margin-top: auto; font-size: 11.5px; line-height: 1.6; color: var(--side-2); }
+
+/* ===================== BÊN PHẢI (80%) ===================== */
+.main { flex: 1; min-width: 0; overflow-y: auto; background: var(--bg); position: relative; }
+/* Tùy chọn hiển thị (Top N + Đặt lại bộ lọc) ở góc phải hàng tiêu đề trang */
+.tools { position: absolute; right: 28px; top: 96px; z-index: 4; display: flex; align-items: center; gap: 10px; }
+.tools .tool-l { margin: 0; font-size: 12px; font-weight: 600; color: var(--muted); white-space: nowrap; }
+.tools .seg { gap: 4px; }
+.tools .seg button { flex: none; width: 40px; height: 32px; border: 1px solid #C9D2DE; background: #fff; color: var(--ink-2); font-size: 13px; }
+.tools .seg button.active { background: var(--side); border-color: var(--side); color: #fff; }
+.tools .reset { height: 32px; width: 36px; padding: 0; border: 1px solid #C9D2DE; background: #fff; color: var(--ink-2); font-size: 12.5px; white-space: nowrap; }
+.tools .reset:hover { background: var(--line-2); }
+.tools .reset svg { width: 14px; height: 14px; stroke: currentColor; }
+.filters { position: sticky; top: 0; z-index: 5; background: rgba(255,255,255,.96); backdrop-filter: blur(4px);
+           border-bottom: 1px solid var(--line); padding: 14px 28px 12px; }
+.frow { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; }
+.f { display: flex; flex-direction: column; gap: 4px; }
+.f span { font-size: 11.5px; font-weight: 600; color: var(--muted); }
+.f select, .f input { height: 36px; border: 1px solid #C9D2DE; border-radius: 8px; padding: 0 10px; font-size: 13px; color: var(--ink); background: #fff; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; font-size: 12px; color: var(--muted); min-height: 22px; align-items: center; }
+.chip { background: #E6F0FF; color: #0B4FA8; border-radius: 999px; padding: 2px 10px; font-weight: 600; }
+.content { padding: 20px 28px 40px; display: flex; flex-direction: column; gap: 16px; }
+
+.phead .eyebrow { font-size: 12px; font-weight: 700; letter-spacing: .8px; text-transform: uppercase; color: var(--bar); }
+.phead.neg .eyebrow { color: var(--bad); }
+.phead h1 { margin: 4px 0 2px; font-size: 24px; line-height: 1.25; }
+.phead p { margin: 0; font-size: 13.5px; color: var(--ink-2); }
+
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.kpi { border: 1px solid var(--line); border-radius: 10px; background: var(--card); padding: 12px 14px; display: flex; flex-direction: column; gap: 3px; }
+.kpi .l { font-size: 12px; font-weight: 600; color: var(--muted); }
+.kpi .v { font-size: 25px; font-weight: 700; line-height: 1.15; }
+.kpi .n { font-size: 11.5px; color: var(--muted); }
+.kpi.bad { background: var(--bad-l); border-color: #F6C9C2; }
+.kpi.bad .v { color: var(--bad); }
+
+.insight { border-radius: 12px; padding: 14px 18px; background: #EEF5FF; border: 1px solid #CFE0F7; display: grid; grid-template-columns: 28px 1fr; gap: 4px 10px; }
+.insight.neg { background: var(--bad-l); border-color: #F6C9C2; }
+.insight .ic { grid-row: span 2; width: 28px; height: 28px; border-radius: 8px; background: var(--bar); display: flex; align-items: center; justify-content: center; }
+.insight.neg .ic { background: var(--bad); }
+.insight h3 { margin: 0; font-size: 14px; }
+.insight ul { margin: 2px 0 0; padding-left: 18px; font-size: 13.5px; line-height: 1.6; color: var(--ink-2); }
+.insight b { color: var(--ink); }
+
+.grid2 { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 16px; }
+.card { border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.card.neg { border-color: #F6C9C2; }
+.ct { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.ct h2 { margin: 0; font-size: 14px; }
+.ct .sub { font-size: 12px; color: var(--muted); font-weight: 400; }
+.tag { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; white-space: nowrap; background: #E6F0FF; color: #0B4FA8; }
+.tag.bad { background: var(--bad-l); color: var(--bad); }
+.tag.wait { background: var(--line-2); color: #4A5568; }
+.note { font-size: 11.5px; color: var(--muted); }
+.empty { padding: 24px; text-align: center; color: var(--muted); font-size: 13px; }
+
+/* thanh ngang */
+.hb { display: flex; flex-direction: column; gap: 8px; }
+.hr { display: grid; grid-template-columns: 150px minmax(0,1fr); gap: 10px; align-items: center; font-size: 12.5px; }
+.hr.click { cursor: pointer; border-radius: 6px; }
+.hr.click:hover { background: var(--line-2); }
+.hr .lb { color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hr .tr { display: flex; align-items: center; gap: 8px; min-width: 0; overflow: hidden; }
+.hr .bar { height: 14px; border-radius: 3px; flex: none; }
+.hr .vt { font-weight: 700; white-space: nowrap; }
+.hr .vs { color: var(--muted); white-space: nowrap; font-size: 11.5px; }
+
+/* cột đứng */
+.vchart { height: 170px; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0,1fr); gap: 12px; align-items: end; border-bottom: 1px solid #C9D2DE; margin-bottom: 22px; }
+.vc { position: relative; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 3px; }
+.vc .vv { font-size: 12px; font-weight: 600; color: var(--muted); white-space: nowrap; }
+.vc .vb { width: 100%; max-width: 60px; border-radius: 5px 5px 0 0; background: var(--bar-l); }
+.vc .vl { position: absolute; bottom: -20px; font-size: 11.5px; font-weight: 600; color: var(--ink-2); white-space: nowrap; }
+.vc.hi .vb { background: var(--bar); } .vc.hi .vv { color: var(--bar); font-weight: 700; }
+.vc.bad .vb { background: var(--bad); } .vc.bad .vv { color: var(--bad); font-weight: 700; }
+.vc.badl .vb { background: var(--bad-2); }
+.vc.click { cursor: pointer; } .vc.click:hover .vb { filter: brightness(.92); }
+
+/* bảng */
+.tbl { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+th { text-align: left; font-weight: 600; color: var(--muted); padding: 7px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; background: #fff; }
+th.sort { cursor: pointer; } th.sort:hover { color: var(--ink); }
+td { padding: 7px 8px; border-bottom: 1px solid var(--line-2); vertical-align: middle; }
+td.r, th.r { text-align: right; white-space: nowrap; }
+tr.click { cursor: pointer; } tr.click:hover td { background: var(--card); }
+.pname { max-width: 360px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-weight: 700; font-size: 12px; }
+.pill.bad { background: var(--bad-l); color: var(--bad); }
+.pill.ok { background: var(--good-l); color: var(--good); }
+.mini { display: inline-block; height: 8px; border-radius: 4px; background: var(--bad); vertical-align: middle; margin-right: 6px; }
+
+/* thẻ quyết định (Tổng quan) */
+.decide { border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; }
+.decide.neg { border-color: #F6C9C2; }
+.dh { display: flex; align-items: center; gap: 10px; }
+.dh .no { width: 30px; height: 30px; border-radius: 8px; background: var(--side); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; }
+.decide.neg .dh .no { background: var(--bad); }
+.dh h2 { margin: 0; font-size: 16px; }
+.dsec { font-size: 11px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; color: var(--muted); }
+.decide ul { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.6; color: var(--ink-2); }
+.do { background: #EEF5FF; border-radius: 8px; padding: 8px 12px; font-size: 13px; line-height: 1.5; }
+.decide.neg .do { background: var(--bad-l); }
+.go { align-self: flex-start; border: 0; background: none; color: var(--bar); font-weight: 600; font-size: 13px; cursor: pointer; padding: 0; }
+.decide.neg .go { color: var(--bad); }
+
+/* Pareto */
+.par { display: grid; grid-template-columns: 210px minmax(0,1fr); gap: 24px; align-items: center; }
+.par.col { grid-template-columns: minmax(0,1fr); gap: 14px; align-items: stretch; }
+.par.col .stat { flex-direction: row; align-items: center; gap: 14px; border-right: 0; padding-right: 0; }
+.par.col .stat .big { white-space: nowrap; }
+.stat { display: flex; flex-direction: column; gap: 6px; border-right: 1px solid var(--line); padding-right: 20px; }
+.stat .big { font-size: 40px; font-weight: 700; line-height: 1; color: var(--bar); }
+.stat .s { font-size: 13px; line-height: 1.45; color: var(--ink-2); }
+.inline-tool { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; color: var(--ink-2); }
+.inline-tool input { width: 140px; accent-color: var(--bar); }
+
+/* người bán */
+.sellers { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px; }
+.sel { background: var(--card); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
+.sel .kv { gap: 6px; }
+.sel .nm { display: flex; align-items: center; gap: 7px; font-weight: 600; font-size: 13px; }
+.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: none; }
+.sel .bigv { font-size: 28px; font-weight: 700; line-height: 1.1; }
+.kv { display: flex; justify-content: space-between; color: var(--muted); }
+.kv b { color: var(--ink); }
+.track { height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; }
+.track div { height: 8px; }
+.legend { display: flex; gap: 12px; font-size: 11.5px; color: var(--ink-2); flex-wrap: wrap; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+.days { font-weight: 700; color: var(--bar); }
+
+/* bảng xếp hạng dạng thanh */
+.grid-25 { display: grid; grid-template-columns: minmax(0,2fr) minmax(0,3fr); gap: 16px; }
+.rank { display: flex; flex-direction: column; }
+.rk { display: grid; gap: 12px; align-items: center; padding: 9px 8px; border-radius: 8px; }
+.rk:not(.rh):nth-child(even) { background: var(--card); }
+.rk:not(.rh):hover { background: #EEF5FF; }
+.rk.click { cursor: pointer; }
+.rk.rh { padding: 0 8px 2px; font-size: 11.5px; font-weight: 600; color: var(--muted); }
+.rsum { font-size: 12.5px; color: var(--ink-2); background: #EEF5FF; border-radius: 8px; padding: 7px 12px; }
+.rsum b { color: var(--bar); }
+.rv { text-align: right; font-size: 12.5px; color: var(--ink-2); white-space: nowrap; }
+.rv.rv1 { font-size: 13px; font-weight: 700; color: var(--ink); }
+.rno { width: 26px; height: 26px; border-radius: 50%; background: #fff; border: 1px solid var(--line); color: var(--muted); font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+.rno.top { background: var(--bar); border-color: var(--bar); color: #fff; }
+.rinfo { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.rname { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rinfo .note { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 5px; }
+.rinfo .dot { width: 8px; height: 8px; }
+.rbar { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.rbar .trk { flex: 1; min-width: 0; height: 10px; border-radius: 5px; background: var(--line); overflow: hidden; }
+.rbar .bar { display: block; height: 10px; border-radius: 5px; background: #8DBBEF; }
+.rbar .bar.top { background: var(--bar); }
+.rval { width: 64px; flex: none; display: flex; flex-direction: column; align-items: flex-end; line-height: 1.2; }
+.rval b { font-size: 13px; white-space: nowrap; }
+.rval .note { font-size: 11px; white-space: nowrap; }
+.more { align-self: center; margin-top: 2px; border: 1px solid var(--line); background: #fff; color: var(--bar); font-weight: 600; font-size: 12.5px;
+        border-radius: 999px; padding: 6px 16px; cursor: pointer; }
+.more:hover { background: #EEF5FF; }
+
+/* thanh hai phía (hệ số r) */
+.dv { display: flex; flex-direction: column; gap: 12px; padding-top: 6px; }
+.dvr { display: grid; grid-template-columns: 128px minmax(0,1fr) 46px; gap: 12px; align-items: center; font-size: 12.5px; }
+.dvl { color: var(--ink-2); white-space: nowrap; }
+.dvt { position: relative; height: 26px; }
+.dvt::before { content: ''; position: absolute; left: 50%; top: -6px; bottom: -6px; width: 1px; background: #9AA5B1; }
+.dvb { position: absolute; top: 4px; height: 18px; border-radius: 4px; background: var(--bar); }
+.dvb.neg { background: var(--chinhhang); }
+.dvv { position: absolute; top: 4px; line-height: 18px; font-weight: 700; font-size: 12.5px; transform: translateX(6px); white-space: nowrap; }
+.dvv.neg { transform: translateX(calc(-100% - 6px)); }
+.dvv.in { transform: translateX(calc(-100% - 6px)); color: #fff; }
+.lv { font-size: 11px; font-weight: 700; text-align: center; border-radius: 999px; padding: 2px 0; }
+.lv.hi { background: #E6F0FF; color: #0B4FA8; } .lv.mid { background: #FFF1E0; color: #8A4500; } .lv.lo { background: var(--line-2); color: var(--muted); }
+.dvax { position: relative; height: 14px; }
+.dvax i { position: absolute; transform: translateX(-50%); font-style: normal; font-size: 11px; color: var(--muted); }
+.dvcap { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); }
+
+/* danh sách thanh ngang có dãn dòng + nền xen kẽ */
+.hb.fill { flex: 1; }
+.hb.fill .hr { flex: 1; }
+.hb.zebra { gap: 4px; }
+.hb.zebra .hr { padding: 8px 8px; border-radius: 6px; }
+.hb.zebra .hr:nth-child(odd) { background: var(--card); }
+.dleg tr.on-bad td { background: var(--bad-l); }
+.dleg th { font-size: 11.5px; padding: 6px; }
+.donut-wrap .dleg td { padding: 9px 6px; }
+
+/* top yếu tố để bán chạy (mức độ bằng chấm + câu bằng chứng) */
+.tf { display: flex; flex-direction: column; gap: 6px; flex: 1; justify-content: space-between; }
+.tfr { display: grid; grid-template-columns: 28px minmax(0,1fr); gap: 12px; align-items: center; padding: 9px 10px; border-radius: 8px; }
+.tfr:nth-child(odd) { background: var(--card); }
+.tfm { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.tfh { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 13.5px; }
+.tfl { display: flex; align-items: center; gap: 8px; flex: none; }
+.dots { display: flex; gap: 3px; }
+.dots i { width: 9px; height: 9px; border-radius: 50%; background: var(--line); }
+.dots i.on { background: var(--bar); }
+.tfw { width: 66px; white-space: nowrap; font-size: 11.5px; font-weight: 700; color: var(--bar); }
+.tft { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tft b { color: var(--ink); }
+
+/* top yếu tố để bán chạy */
+.xpill { display: inline-block; background: var(--bar); color: #fff; font-weight: 700; font-size: 12.5px; border-radius: 999px; padding: 3px 10px; }
+.lohi { font-size: 12.5px; color: var(--muted); font-weight: 400; }
+.lohi b { color: var(--ink); font-size: 13.5px; }
+
+/* yếu tố giúp bán chạy hơn (so sánh hai nhóm) */
+.imp { display: flex; flex-direction: column; gap: 8px; flex: 1; justify-content: space-between; }
+.impr { display: grid; grid-template-columns: minmax(0,1fr) auto 62px; gap: 14px; align-items: center; padding: 10px 12px; border-radius: 8px; background: var(--card); }
+.impn { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 13px; }
+.impn .note { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.impv { display: flex; align-items: baseline; gap: 6px; white-space: nowrap; font-size: 13px; }
+.impv .lo { color: var(--muted); }
+.impv .arr { color: var(--muted); font-size: 12px; }
+.impv .hi { font-size: 16px; font-weight: 700; color: var(--ink); }
+.impx { text-align: center; background: var(--bar); color: #fff; font-weight: 700; font-size: 13px; border-radius: 999px; padding: 4px 0; }
+
+/* mức độ liên quan (|r| trên nền Yếu / Vừa / Mạnh) */
+.fr { display: flex; flex-direction: column; gap: 10px; flex: 1; justify-content: space-between; }
+.frr { display: flex; flex-direction: column; gap: 5px; }
+.frtop { display: flex; align-items: baseline; gap: 8px; font-size: 13px; min-width: 0; }
+.frtop .note { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.frt { position: relative; height: 14px; border-radius: 4px;
+       background: linear-gradient(90deg, #F1F4F8 0 30%, #E6ECF4 30% 50%, #D8E2EF 50% 100%); }
+.frt::after { content: ''; position: absolute; inset: 0; border-radius: 4px; pointer-events: none;
+              background: linear-gradient(90deg, transparent calc(30% - 1px), #fff calc(30% - 1px) 30%, transparent 30% calc(50% - 1px), #fff calc(50% - 1px) 50%, transparent 50%); }
+.frb { position: absolute; left: 0; top: 0; height: 14px; border-radius: 4px; background: var(--bar); z-index: 1; }
+.frb.neg { background: var(--chinhhang); }
+.frv { font-size: 14px; font-weight: 700; color: var(--bar); }
+.frv.neg { color: #B4620B; }
+.frz { display: flex; font-size: 11px; font-weight: 600; color: var(--muted); margin-bottom: -4px; }
+.frz span { text-align: center; }
+
+/* ma trận nhiệt số lượt đánh giá × điểm */
+table.hm { border-collapse: separate; border-spacing: 5px; }
+.hm th { background: none; border: 0; text-align: center; font-size: 12px; color: var(--muted); padding: 4px 6px; }
+.hm th.rl { text-align: left; color: var(--ink); font-weight: 600; font-size: 13px; white-space: nowrap; width: 130px; }
+.hm th.hm-ax { vertical-align: bottom; font-size: 12px; font-weight: 600; color: var(--muted); }
+.hm th.hm-grp { font-size: 12px; font-weight: 600; color: var(--ink-2); border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+.hm th.hm-all { vertical-align: bottom; font-weight: 600; color: var(--ink-2); }
+.hm td { border: 0; border-radius: 6px; text-align: center; font-size: 14px; font-weight: 700; padding: 13px 6px; }
+.hm td.hm-na { background: var(--line-2); color: var(--muted); font-weight: 400; }
+.hm td.sum { font-size: 13px; box-shadow: inset 0 0 0 2px rgba(255,255,255,.6); }
+.hm .gap { width: 6px; padding: 0; background: none; }
+.hm .gap-row td { padding: 0; height: 2px; background: none; }
+.hm-scale { display: flex; align-items: center; gap: 8px; justify-content: flex-end; font-size: 11.5px; color: var(--muted); }
+.hm-scale i { width: 120px; height: 8px; border-radius: 4px; background: linear-gradient(90deg, rgb(238,245,255), rgb(11,61,145)); }
+
+/* tỷ trọng nhóm người bán */
+.sbw { display: flex; flex-direction: column; gap: 8px; }
+.sb { display: grid; grid-template-columns: 72px minmax(0,1fr); gap: 10px; align-items: center; font-size: 12.5px; color: var(--ink-2); }
+.sbt { display: flex; height: 28px; border-radius: 6px; overflow: hidden; }
+.sbt span { display: flex; align-items: center; justify-content: center; color: #fff; font-size: 11.5px; font-weight: 700; }
+.stbl td, .stbl th { padding: 7px 8px; }
+.stbl tr.on td { background: #EEF5FF; }
+.dpair { display: flex; justify-content: space-around; }
+.dpair-i { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
+.dleg tr.bad td { color: var(--bad); }
+.dleg th { padding: 6px 8px; }
+
+/* donut cơ cấu giá */
+.dseg { display: inline-flex; gap: 4px; background: var(--line-2); padding: 3px; border-radius: 8px; align-self: flex-start; }
+.dseg button { border: 0; background: transparent; padding: 5px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; color: var(--ink-2); cursor: pointer; }
+.dseg button.active { background: #fff; color: var(--bar); box-shadow: 0 1px 2px rgba(11,31,58,.12); }
+.donut-wrap { display: flex; align-items: center; gap: 18px; flex: 1; }
+.donut-wrap svg { flex: none; }
+.dleg { flex: 1; }
+.dleg td { padding: 9px 8px; color: var(--ink-2); white-space: nowrap; font-size: 13px; }
+.dleg td i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 7px; vertical-align: -1px; }
+.dleg .cur { font-weight: 700; color: var(--ink); }
+.dleg tr.on td { background: #EEF5FF; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ============ BÊN TRÁI: CHỨC NĂNG ============ -->
+  <aside class="side">
+    <div class="brand">
+      <div class="logo"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></svg></div>
+      <div><b>Tiki · Hành vi tiêu dùng</b><span>Nhóm 1 · IS383.1 · ĐH Thăng Long</span></div>
+    </div>
+
+    <div class="slabel">Báo cáo</div>
+    <nav class="nav" id="nav" aria-label="Trang"></nav>
+
+    <div class="foot">
+      Tiki.vn · 10/2026 · Không gồm Voucher
+    </div>
+  </aside>
+
+  <!-- ============ BÊN PHẢI: NỘI DUNG ============ -->
+  <main class="main" id="main">
+    <div class="filters">
+      <div class="frow">
+        <label class="f"><span>Danh mục</span><select id="fCat"></select></label>
+        <label class="f"><span>Người bán</span><select id="fGrp"></select></label>
+        <label class="f"><span>Giá</span><select id="fPb"></select></label>
+        <label class="f"><span>Thương hiệu</span><input id="fBrand" list="brandList" placeholder="Gõ để tìm…"><datalist id="brandList"></datalist></label>
+      </div>
+      <div class="chips" id="chips"></div>
+    </div>
+    <!-- Tùy chọn hiển thị: nằm ở góc phải hàng tiêu đề trang (vị trí được đặt lại sau mỗi lần vẽ, xem render) -->
+    <div class="tools" id="tools">
+      <span class="tool-l">Số lượng hiển thị (Top N)</span>
+      <div class="seg" id="topn" role="group" aria-label="Số lượng hiển thị (Top N)">
+        <button type="button" data-n="5">5</button><button type="button" data-n="10">10</button><button type="button" data-n="20">20</button>
+      </div>
+      <button type="button" class="reset" id="reset" title="Đặt lại bộ lọc" aria-label="Đặt lại bộ lọc">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 3v6h6"/></svg>
+      </button>
+    </div>
+    <div class="content" id="content"></div>
+  </main>
+</div>
+
+<script id="data" type="application/json">__DATA__</script>
+<script>
+/* =====================================================================
+   1. NẠP DỮ LIỆU (đã loại Voucher)
+   p: [danh mục, nhóm người bán, giá, đã bán, điểm, lượt đánh giá, thương hiệu, năm lên sàn] × 41.983 SP
+   d: [chỉ số SP, % giảm giá 21/10, lượt bán tăng 18→21/10 (-1 = thiếu), hết hàng] × SP có giá hằng ngày
+   ===================================================================== */
+const RAW = JSON.parse(document.getElementById('data').textContent);
+const GROUPS = ['Tiki Trading', 'Gian hàng chính hãng', 'Người bán thông thường'];
+const GSHORT = ['Tiki Trading', 'Chính hãng', 'Thông thường'];
+const GCOL = ['var(--tiki)', 'var(--chinhhang)', 'var(--thuong)'];
+const PBANDS = ['Dưới 100k', '100k – 500k', '500k – 2tr', 'Trên 2tr'];
+const priceBand = p => p < 0 ? -1 : p < 1e5 ? 0 : p < 5e5 ? 1 : p < 2e6 ? 2 : 3;
+
+const ALL = [];
+for (let i = 0, k = 0; k < RAW.p.length; i++, k += 8) {
+  const p = RAW.p;
+  ALL.push({ i, c: p[k], g: p[k + 1], pr: p[k + 2], s: p[k + 3], r: p[k + 4], n: p[k + 5], b: p[k + 6], y: p[k + 7],
+             pb: priceBand(p[k + 2]), name: RAW.names[i] });
+}
+for (let k = 0; k < RAW.d.length; k += 4) {
+  const o = ALL[RAW.d[k]]; o.disc = RAW.d[k + 1]; o.dl = RAW.d[k + 2]; o.oos = RAW.d[k + 3];
+}
+// rs: [chỉ số SP, số lượt 1★, 2★, 3★, 4★, 5★] — có khi đã nạp review_stars.csv
+const HAS_STARS = Array.isArray(RAW.rs) && RAW.rs.length > 0;
+if (HAS_STARS) for (let k = 0; k < RAW.rs.length; k += 6) ALL[RAW.rs[k]].st = RAW.rs.slice(k + 1, k + 6);
+// asp: [chỉ số SP, số đánh giá 1–2★ có nội dung, rồi 7 khía cạnh (cùng thứ tự ASPECTS) = số đánh giá 1–2★ nhắc tới khía cạnh đó]
+// dd + dy: chuỗi theo NGÀY — dd = { d0: ngày đầu, n: số ngày }; dy = mỗi sản phẩm [chỉ số SP, v1…vN]
+//   v = -1 (thiếu ngày) hoặc ((lượt bán trong ngày + 1) × 101 + % giảm giá) × 2 + hết hàng; (lượt bán + 1) = 0 nghĩa là không hợp lệ
+const HAS_SERIES = !!(RAW.dd && Array.isArray(RAW.dy) && RAW.dy.length);
+const ND = HAS_SERIES ? RAW.dd.n : 0;
+const WIN = HAS_SERIES ? Math.min(7, ND - 1) : 3;   // cửa sổ ngày gần nhất để tính "bán trong N ngày"
+const dayDate = i => new Date(new Date(RAW.dd.d0 + 'T00:00:00').getTime() + i * 864e5);
+const dayTxt = (i, withYear) => { const d = dayDate(i); return d.getDate() + '/' + (d.getMonth() + 1) + (withYear ? '/' + d.getFullYear() : ''); };
+const unpackDay = v => { const r = v >> 1; return { oos: v & 1, disc: r % 101, sold: Math.floor(r / 101) - 1 }; };   // sold = -1: không hợp lệ
+if (HAS_SERIES) for (let k = 0; k < RAW.dy.length; k += ND + 1) {
+  const o = ALL[RAW.dy[k]], sr = RAW.dy.slice(k + 1, k + 1 + ND); o.sr = sr;
+  const lastV = sr[ND - 1];
+  if (lastV >= 0) { const u = unpackDay(lastV); o.disc = u.disc; o.oos = u.oos; }   // ngày cuối thiếu → không tính vào nhóm "có giá hằng ngày"
+  let s = 0, c = 0;
+  for (let i = ND - WIN; i < ND; i++) if (sr[i] >= 0) { const u = unpackDay(sr[i]); if (u.sold >= 0) { s += u.sold; c++; } }
+  o.dl = c >= Math.ceil(WIN * 0.6) ? s * WIN / c : -1;   // lượt bán quy về WIN ngày gần nhất; -1 = thiếu dữ liệu
+}
+const HAS_ASP = Array.isArray(RAW.asp) && RAW.asp.length > 0;
+if (HAS_ASP) for (let k = 0; k < RAW.asp.length; k += 9) ALL[RAW.asp[k]].as = RAW.asp.slice(k + 1, k + 9);
+
+/* =====================================================================
+   2. TRẠNG THÁI & TIỆN ÍCH
+   ===================================================================== */
+const PAGES = [
+  { id: 'ov', no: '00', name: 'Tổng quan' },
+  { id: 'mk', no: '01', name: 'Thị trường' },
+  { id: 'bh', no: '02', name: 'Hành vi' },
+  { id: 'rv', no: '03', name: 'Đánh giá' },
+  { id: 'tr', no: '04', name: 'Xu hướng' }
+];
+const hashPage = location.hash.slice(1);
+const state = { page: PAGES.some(p => p.id === hashPage) ? hashPage : 'ov',
+                cat: -1, grp: -1, pb: -1, brand: '', topn: 10, pareto: 80, sortKey: 's', sortDir: -1, catAll: false, expand: {}, donut: 's', sellerMetric: 'sP', lowTab: 'g', lowMetric: 'n', trendMetric: 's' };
+
+const fmt = (v, d = 0) => (isFinite(v) ? v : 0).toLocaleString('vi-VN', { minimumFractionDigits: d, maximumFractionDigits: d });
+const pct = (v, d = 1) => fmt(v, d) + '%';
+const big = v => v >= 1e9 ? fmt(v / 1e9, 1) + ' tỷ' : v >= 1e6 ? fmt(v / 1e6, 2) + ' triệu' : fmt(v);
+const money = v => v >= 1e11 ? fmt(v / 1e9) + ' tỷ đồng' : v >= 1e9 ? fmt(v / 1e9, 1) + ' tỷ đồng' : fmt(v / 1e6, 1) + ' triệu đồng';
+const esc = s => String(s).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+const median = arr => { if (!arr.length) return 0; const s = Float64Array.from(arr).sort(); const m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+const sumBy = (a, f) => { let t = 0; for (const x of a) t += f(x); return t; };
+const wRating = a => { let w = 0, n = 0; for (const x of a) if (x.n > 0) { w += x.r * x.n; n += x.n; } return n ? w / n : 0; };
+const ln1 = v => Math.log(1 + Math.max(0, v));
+function pearson(xs, ys) {
+  const n = xs.length; if (n < 3) return NaN;
+  let sx = 0, sy = 0, sxx = 0, syy = 0, sxy = 0;
+  for (let i = 0; i < n; i++) { const x = xs[i], y = ys[i]; sx += x; sy += y; sxx += x * x; syy += y * y; sxy += x * y; }
+  const den = Math.sqrt((n * sxx - sx * sx) * (n * syy - sy * sy));
+  return den ? (n * sxy - sx * sy) / den : NaN;
+}
+const rTxt = r => isNaN(r) ? '—' : r.toFixed(2).replace('.', ',');
+
+function filtered() {
+  const bi = state.brand ? RAW.brands.indexOf(state.brand) : -1;
+  return ALL.filter(x => (state.cat < 0 || x.c === state.cat) && (state.grp < 0 || x.g === state.grp) &&
+                         (state.pb < 0 || x.pb === state.pb) && (!state.brand || x.b === bi));
+}
+
+/* ---------- khối giao diện dùng chung ---------- */
+const ICON_BULB = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z"/></svg>';
+const ICON_WARN = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>';
+const head = (eyebrow, h, p, neg) => `<div class="phead ${neg ? 'neg' : ''}"><div class="eyebrow">${eyebrow}</div><h1>${h}</h1></div>`;
+const kpiRow = items => `<div class="kpis">${items.map(([l, v, n, bad]) => `<div class="kpi ${bad ? 'bad' : ''}"><span class="l">${l}</span><span class="v">${v}</span><span class="n">${n || ''}</span></div>`).join('')}</div>`;
+const insight = (title, items, neg) => `<div class="insight ${neg ? 'neg' : ''}"><div class="ic">${neg ? ICON_WARN : ICON_BULB}</div><h3>${title}</h3><ul>${items.map(t => `<li>${t}</li>`).join('')}</ul></div>`;
+const card = (title, tagHtml, body, cls = '') => `<section class="card ${cls}"><div class="ct"><h2>${title}</h2>${tagHtml || ''}</div>${body}</section>`;
+const tag = (t, cls = '') => `<span class="tag ${cls}">${t}</span>`;
+const hbars = (rows, max, opt = {}) => rows.length ? `<div class="hb ${opt.zebra ? 'zebra' : ''} ${opt.fill ? 'fill' : ''}">${rows.map(r => `
+  <div class="hr ${r.click !== undefined ? 'click' : ''}" ${r.click !== undefined ? `data-cat="${r.click}" title="${r.tip ? r.tip + ' · ' : ''}Bấm để lọc theo ${esc(r.label)}"` : (r.tip ? `title="${esc(r.tip)}"` : '')} style="grid-template-columns:${opt.lw || 150}px minmax(0,1fr)">
+    <span class="lb" title="${esc(r.label)}">${esc(r.label)}</span>
+    <span class="tr"><span class="bar" style="width:${Math.max(0.5, r.v / (max || 1) * (opt.w || 48))}%;background:${r.color || 'var(--bar)'}"></span><span class="vt">${r.t}</span>${r.s ? `<span class="vs">${r.s}</span>` : ''}</span>
+  </div>`).join('')}</div>` : '<div class="empty">Không có dữ liệu với bộ lọc hiện tại</div>';
+const vcols = (rows, max, h = 130) => `<div class="vchart" style="height:${h + 40}px">${rows.map(r => `
+  <div class="vc ${r.cls || ''}" ${r.attr || ''}><span class="vv">${r.t}</span><span class="vb" style="height:${Math.max(3, (r.v / (max || 1)) * h)}px"></span><span class="vl">${r.l}</span></div>`).join('')}</div>`;
+const table = (cols, rows, opt = {}) => rows.length ? `<div class="tbl"><table><thead><tr>${cols.map(c => `<th class="${c.r ? 'r' : ''} ${c.key ? 'sort' : ''}" ${c.key ? `data-sort="${c.key}"` : ''}>${c.h}${c.key && state.sortKey === c.key ? (state.sortDir < 0 ? ' ↓' : ' ↑') : ''}</th>`).join('')}</tr></thead>
+  <tbody>${rows.map(r => `<tr ${opt.rowAttr ? opt.rowAttr(r) : ''}>${cols.map(c => `<td class="${c.r ? 'r' : ''}">${c.f(r)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>` : '<div class="empty">Không có dữ liệu với bộ lọc hiện tại</div>';
+
+/* =====================================================================
+   3. TÍNH TOÁN CHUNG
+   ===================================================================== */
+function catTable(arr) {
+  const m = new Map();
+  for (const x of arr) {
+    let o = m.get(x.c);
+    if (!o) { o = { c: x.c, name: RAW.cats[x.c], sp: 0, s: 0, rev: 0, sold: [], zero: 0, rated: 0, low: 0, w: 0, wn: 0, tiki: 0 }; m.set(x.c, o); }
+    o.sp++; o.s += x.s; if (x.pr > 0) o.rev += x.pr * x.s; o.sold.push(x.s); if (x.s === 0) o.zero++;
+    if (x.n > 0) { o.rated++; o.w += x.r * x.n; o.wn += x.n; if (x.r < 4) o.low++; }
+    if (x.g === 0) o.tiki++;
+  }
+  const tot = sumBy(arr, x => x.s) || 1;
+  return [...m.values()].map(o => ({ ...o, share: o.s / tot * 100, med: median(o.sold), zeroP: o.zero / o.sp * 100,
+    rating: o.wn ? o.w / o.wn : 0, lowP: o.rated ? o.low / o.rated * 100 : 0, tikiP: o.tiki / o.sp * 100 }));
+}
+function paretoNeed(arr, target) {
+  const s = arr.map(x => x.s).sort((a, b) => b - a); const tot = sumBy(s, v => v);
+  if (!tot) return [0, 0];
+  let c = 0; for (let i = 0; i < s.length; i++) { c += s[i]; if (c >= target / 100 * tot) return [i + 1, (i + 1) / s.length * 100]; }
+  return [s.length, 100];
+}
+function bandShares(arr) {
+  const tot = sumBy(arr, x => x.s) || 1, totRev = sumBy(arr, x => x.pr > 0 ? x.pr * x.s : 0) || 1, n = arr.length || 1;
+  return PBANDS.map((l, b) => { const g = arr.filter(x => x.pb === b);
+    return { l, sp: g.length / n * 100, s: sumBy(g, x => x.s) / tot * 100, rev: sumBy(g, x => x.pr > 0 ? x.pr * x.s : 0) / totRev * 100 }; });
+}
+const REV_BANDS = [['0', 0, 1], ['1–9', 1, 10], ['10–49', 10, 50], ['50–199', 50, 200], ['200+', 200, Infinity]];
+const RATE_BANDS = [['< 3★', 0, 3], ['3–4★', 3, 4], ['4–4,5★', 4, 4.5], ['4,5–4,8★', 4.5, 4.8], ['4,8–5★', 4.8, 5.01]];
+const DISC_BANDS = [['Không giảm', 0, 0.5], ['1–10%', 0.5, 10.5], ['11–20%', 10.5, 20.5], ['21–30%', 20.5, 30.5], ['> 30%', 30.5, 1000]];
+// Có chuỗi theo ngày: tính theo từng sản phẩm-ngày (mức giảm giá của ngày đó so với việc có bán trong chính ngày đó)
+function dayBands(arr) {
+  const acc = DISC_BANDS.map(() => ({ n: 0, s: 0 }));
+  for (const x of arr) if (x.sr) for (let i = 1; i < ND; i++) {
+    if (x.sr[i] < 0) continue;
+    const u = unpackDay(x.sr[i]); if (u.sold < 0) continue;
+    const b = DISC_BANDS.findIndex(([, lo, hi]) => u.disc >= lo && u.disc < hi);
+    if (b >= 0) { acc[b].n++; if (u.sold > 0) acc[b].s++; }
+  }
+  return DISC_BANDS.map(([l], b) => ({ l, n: acc[b].n, sellP: acc[b].n ? acc[b].s / acc[b].n * 100 : 0 }));
+}
+function discountStats(arr) {
+  const d = arr.filter(x => x.disc !== undefined);
+  const valid = d.filter(x => x.dl >= 0);
+  const bands = HAS_SERIES ? dayBands(arr) : DISC_BANDS.map(([l, a, b]) => { const g = valid.filter(x => x.disc >= a && x.disc < b);
+    return { l, n: g.length, sellP: g.length ? g.filter(x => x.dl > 0).length / g.length * 100 : 0 }; });
+  const disc = d.filter(x => x.disc > 0);
+  return { d, valid, bands, perDay: sumBy(valid, x => x.dl) / WIN, discP: d.length ? disc.length / d.length * 100 : 0,
+           discAvg: disc.length ? sumBy(disc, x => x.disc) / disc.length : 0, oosP: d.length ? d.filter(x => x.oos).length / d.length * 100 : 0 };
+}
+const lowRated = arr => arr.filter(x => x.n > 0 && x.r < 4);
+const hotLow = arr => lowRated(arr).filter(x => x.n >= 10 && x.name).sort((a, b) => b.s - a.s);
+
+/* =====================================================================
+   4. CÁC TRANG
+   ===================================================================== */
+function pageOverview(arr) {
+  const tot = sumBy(arr, x => x.s), rated = arr.filter(x => x.n > 0);
+  const cats = catTable(arr).sort((a, b) => b.s - a.s);
+  const bands = bandShares(arr).slice().sort((a, b) => b.s - a.s);
+  const [need, needP] = paretoNeed(arr, 80);
+  const m0 = median(arr.filter(x => x.n === 0).map(x => x.s)), m50 = median(arr.filter(x => x.n >= 50).map(x => x.s));
+  const r = pearson(arr.map(x => ln1(x.n)), arr.map(x => ln1(x.s)));
+  const low = lowRated(arr), hot = hotLow(arr);
+  // Danh mục có nhiều đánh giá 1–2★ nhất (cùng cách tính với trang Đánh giá); chưa có số sao thật thì dùng cách cũ
+  const loAgg = new Map();
+  if (HAS_STARS) for (const x of arr) if (x.st) { const o = loAgg.get(x.c) || { name: RAW.cats[x.c], lo: 0 }; o.lo += x.st[0] + x.st[1]; loAgg.set(x.c, o); }
+  const worstStar = [...loAgg.values()].sort((a, b) => b.lo - a.lo)[0];
+  const worst = catTable(arr).filter(c => c.rated >= 30).sort((a, b) => b.lowP - a.lowP)[0];
+  const ds = discountStats(arr); const b0 = ds.bands[0].sellP, b3 = ds.bands[3].sellP;
+  const tikiMed = median(arr.filter(x => x.g === 0).map(x => x.s)), thMed = median(arr.filter(x => x.g === 2).map(x => x.s));
+
+  const dc = (no, q, facts, act, page, neg) => `<div class="decide ${neg ? 'neg' : ''}">
+      <div class="dh"><span class="no">${no}</span><h2>${q}</h2></div>
+      <ul>${facts.map(f => `<li>${f}</li>`).join('')}</ul>
+      <div class="dsec">Đề xuất</div><div class="do">${act}</div>
+      <button type="button" class="go" data-go="${page}">Xem chi tiết →</button></div>`;
+
+  return head('Tổng quan', 'Bảng quyết định cho người bán', 'Bốn câu hỏi người bán cần trả lời trước khi kinh doanh trên Tiki. Mỗi thẻ tóm tắt câu trả lời từ dữ liệu và việc nên làm.') +
+    kpiRow([['Sản phẩm', fmt(arr.length)], ['Lượng bán', big(tot)],
+            ['Doanh thu ước tính', fmt(sumBy(arr, x => x.pr > 0 ? x.pr * x.s : 0) / 1e9) + ' tỷ', 'đồng'],
+            ['Điểm TB sản phẩm', fmt(wRating(arr), 2) + ' ★'], ['Có đánh giá', pct(rated.length / (arr.length || 1) * 100)]]) +
+    `<div class="grid2">
+      ${dc('01', 'Ngành hàng & mức giá chủ lực', [
+        cats[0] ? `Danh mục bán nhiều nhất: <b>${esc(cats[0].name)}</b> (${pct(cats[0].share)} lượng bán)` : 'Không có dữ liệu',
+        bands[0] ? `Mức giá bán chạy nhất: <b>${bands[0].l}</b>, chiếm ${pct(bands[0].s)} lượng bán` : '',
+        `Chỉ <b>${pct(needP, 2)}</b> sản phẩm (${fmt(need)} sản phẩm) tạo ra 80% lượng bán`],
+        `Ưu tiên nhóm giá <b>${bands[0] ? bands[0].l : '—'}</b>. Thị trường rất tập trung, sản phẩm mới cần điểm khác biệt rõ để cạnh tranh với nhóm dẫn đầu.`, 'mk')}
+      ${dc('02', 'Yếu tố thúc đẩy lượt mua', [
+        `Sản phẩm có từ 50 đánh giá: trung vị bán <b>${fmt(m50)}</b>; chưa có đánh giá: <b>${fmt(m0)}</b>`,
+        `Tương quan số đánh giá – lượng bán: <b>r = ${rTxt(r)}</b>`,
+        `Tiki Trading trung vị <b>${fmt(tikiMed)}</b>, người bán thông thường <b>${fmt(thMed)}</b>`],
+        'Tập trung có được <b>những đánh giá đầu tiên</b> (khuyến khích người mua đánh giá, chăm sóc sau bán). Uy tín người bán là lợi thế lớn.', 'bh')}
+      ${dc('03', 'Vấn đề cần khắc phục', [
+        `<b>${pct(low.length / (rated.length || 1) * 100)}</b> sản phẩm có đánh giá bị chấm điểm TB dưới 4★ (${fmt(low.length)} sản phẩm)`,
+        `<b>${fmt(hot.length)}</b> sản phẩm có từ 10 đánh giá đang bị chấm điểm TB dưới 4★`,
+        worstStar ? `Danh mục có nhiều đánh giá 1–2★ nhất: <b>${esc(worstStar.name)}</b> (${fmt(worstStar.lo)} lượt)`
+          : worst ? `Danh mục có tỷ lệ điểm thấp cao nhất: <b>${esc(worst.name)}</b> (${pct(worst.lowP)})` : ''],
+        `Rà soát ngay các sản phẩm <b>bán chạy nhưng điểm thấp</b>, vì mỗi đánh giá xấu làm giảm khả năng được chọn của người mua sau.`, 'rv', true)}
+      ${dc('04', 'Kế hoạch khuyến mãi', [
+        ds.valid.length ? `Sản phẩm giảm 21–30% có tỷ lệ bán ra <b>${pct(b3)}</b>, sản phẩm không giảm chỉ <b>${pct(b0)}</b>` : 'Danh mục đang chọn chưa có dữ liệu giá hằng ngày',
+        ds.d.length ? `${pct(ds.discP)} sản phẩm đang giảm giá · ${pct(ds.oosP)} sản phẩm hết hàng` : '',
+        'Mốc khuyến mãi gần nhất: Black Friday (27/11)'],
+        'Chuẩn bị mức giảm <b>21–30%</b> và đủ tồn kho cho các ngày khuyến mãi sắp tới.', 'tr')}
+    </div>`;
+}
+
+function pageMarket(arr) {
+  const tot = sumBy(arr, x => x.s), rev = sumBy(arr, x => x.pr > 0 ? x.pr * x.s : 0);
+  const cats = catTable(arr);
+  const byS = cats.slice().sort((a, b) => b.s - a.s);
+  const bands = bandShares(arr);
+  const bestBand = bands.slice().sort((a, b) => b.s - a.s)[0];
+  const [need, needP] = paretoNeed(arr, state.pareto);
+  const [n80, p80] = paretoNeed(arr, 80);
+  const zeroP = arr.filter(x => x.s === 0).length / (arr.length || 1) * 100;
+  const topCats = byS.slice(0, state.topn);
+
+  const sorted = cats.slice().sort((a, b) => state.sortDir * ((a[state.sortKey] > b[state.sortKey]) - (a[state.sortKey] < b[state.sortKey])));
+  // Bảng chi tiết: mặc định hiện 8 dòng, bấm nút để xem hết
+  const CAT_ROWS = 8;
+  const catRowsShown = state.catAll ? sorted : sorted.slice(0, CAT_ROWS);
+  const catToggle = sorted.length > CAT_ROWS ? `<button type="button" class="more" data-toggle="cat">${state.catAll ? 'Thu gọn ▴' : `Xem tất cả ${sorted.length} danh mục ▾`}</button>` : '';
+  const brandAgg = new Map();
+  for (const x of arr) { let o = brandAgg.get(x.b); if (!o) { o = { name: RAW.brands[x.b], sp: 0, s: 0, list: [] }; brandAgg.set(x.b, o); } o.sp++; o.s += x.s; o.list.push(x); }
+  const brands = [...brandAgg.values()].filter(b => b.name !== 'OEM').sort((a, b) => b.s - a.s).slice(0, state.topn);
+  const prods = arr.filter(x => x.name).sort((a, b) => b.s - a.s).slice(0, state.topn);
+  const thresholds = [50, 55, 60, 65, 70, 75, 80, 85, 90, 95].map(t => [t, ...paretoNeed(arr, t)]);
+  const maxP = Math.max(...thresholds.map(t => t[2]), 0.01);
+
+  return head('01 · Thị trường', 'Ngành hàng & mức giá chủ lực', 'Danh mục, mức giá và sản phẩm nào đang được mua nhiều nhất; lượng mua tập trung hay trải đều.') +
+    kpiRow([['Nhóm 80%', pct(p80, 2), 'sản phẩm tạo 80% lượng bán'], ['Chưa bán', pct(zeroP), 'sản phẩm chưa phát sinh lượt bán', zeroP > 30]]) +
+    `<div class="grid2">
+      ${card(`Top ${state.topn} danh mục theo lượng bán`, '', rankTable(topCats.map(c => ({
+        name: c.name, sub: `${fmt(c.sp)} sản phẩm${c.wn ? ' · ' + fmt(c.rating, 2) + '★' : ''}`,
+        vals: [big(c.s), pct(c.share)], attr: `data-cat="${c.c}" title="Bấm để lọc theo ${esc(c.name)}"` })),
+        ['Lượng bán', '% lượng bán'], `Chiếm <b>${pct(sumBy(topCats, c => c.share))}</b> tổng lượng bán`, 'cat3'))}
+      ${card('Cơ cấu theo mức giá', '', priceDonut(bands))}
+    </div>` +
+    card('Mức độ tập trung (Pareto)', `<span class="inline-tool"><label for="pareto">Ngưỡng</label><input type="range" id="pareto" min="50" max="95" step="5" value="${state.pareto}"><b>${state.pareto}%</b></span>`,
+      `<div class="par"><div class="stat"><span class="big">${pct(needP, 2)}</span><span class="s">sản phẩm (${fmt(need)}) tạo ra ${state.pareto}% lượng bán</span></div>
+       <div>${vcols(thresholds.map(([t, n, p]) => ({ l: t + '%', v: p, t: pct(p, 2), cls: 'click ' + (t === state.pareto ? 'hi' : ''), attr: `data-par="${t}" title="${fmt(n)} sản phẩm"` })), maxP, 110)}</div></div>`) +
+    card('Bảng chi tiết theo danh mục', '', table([
+      { h: 'Danh mục', f: c => esc(c.name), key: 'name' }, { h: 'Số sản phẩm', f: c => fmt(c.sp), r: 1, key: 'sp' },
+      { h: 'Lượng bán', f: c => fmt(c.s), r: 1, key: 's' }, { h: '% lượng bán', f: c => pct(c.share), r: 1, key: 'share' },
+      { h: 'Doanh thu ước tính', f: c => money(c.rev), r: 1, key: 'rev' }, { h: 'Trung vị bán', f: c => fmt(c.med, 1), r: 1, key: 'med' },
+      { h: '% chưa bán', f: c => pct(c.zeroP), r: 1, key: 'zeroP' }, { h: 'Điểm TB', f: c => c.wn ? fmt(c.rating, 2) + '★' : '—', r: 1, key: 'rating' },
+      { h: '% Tiki Trading', f: c => pct(c.tikiP), r: 1, key: 'tikiP' }], catRowsShown, { rowAttr: c => `class="click" data-cat="${c.c}"` }) + catToggle) +
+    `<div class="grid-25">
+      ${card(`Top ${state.topn} thương hiệu`, '', rankTable(brands.map(b => {
+        const w = wRating(b.list);
+        return { name: b.name, sub: `${fmt(b.sp)} sản phẩm${w ? ' · ' + fmt(w, 2) + '★' : ''}`, vals: [fmt(b.s), pct(b.s / (tot || 1) * 100)] };
+      }), ['Lượng bán', 'Thị phần'], `Chiếm <b>${pct(sumBy(brands, b => b.s) / (tot || 1) * 100)}</b> tổng lượng bán`, 'brand'))}
+      ${card(`Top ${state.topn} sản phẩm bán chạy`, '', rankTable(prods.map(x => ({
+        name: x.name,
+        sub: `<span class="dot" style="background:${GCOL[x.g]}"></span>${GSHORT[x.g]} · ${esc(RAW.cats[x.c])}${x.pr > 0 ? ' · ' + fmt(x.pr / 1000) + 'k đ' : ''}${x.n ? ' · ' + fmt(x.r, 1) + '★' : ''}`,
+        vals: [fmt(x.s), x.pr > 0 ? money(x.pr * x.s) : '—'] })),
+        ['Đã bán', 'Doanh thu'], `Chiếm <b>${pct(sumBy(prods, x => x.s) / (tot || 1) * 100)}</b> tổng lượng bán`, 'prod'))}
+    </div>`;
+}
+
+// Bảng xếp hạng: dòng tổng ở đầu làm mốc so sánh · hạng · tên + thông tin phụ · các cột số
+// Donut có nút chuyển chỉ số: items = [{ l, c, ...giá trị % theo từng chỉ số }], metrics = { khoá: nhãn }
+// Giữa vòng là nhóm lớn nhất của chỉ số đang chọn; bảng bên cạnh ghi % từng nhóm.
+function switchDonut(items, metrics, k, attr) {
+  const top = items.reduce((a, b) => b[k] > a[k] ? b : a, items[0]);
+  return `<div class="dseg" role="group" aria-label="Chỉ số">${Object.entries(metrics).map(([m, l]) =>
+      `<button type="button" class="${m === k ? 'active' : ''}" ${attr}="${m}">${l}</button>`).join('')}</div>
+    <div class="donut-wrap">
+      ${donutSvg(items.map(it => ({ l: it.l, v: it[k], c: it.c })), pct(top[k]), top.l, 180)}
+      <table class="dleg"><tbody>${items.map(it => `<tr class="${it === top ? 'on' : ''}"><td><i style="background:${it.c}"></i>${it.l}</td><td class="r cur">${pct(it[k])}</td></tr>`).join('')}</tbody></table>
+    </div>`;
+}
+
+// Cơ cấu theo mức giá: chọn Lượng bán / Doanh thu / Số SP
+const DONUT_COLS = ['#BFD8F7', '#6FA8E8', '#1570D6', '#0B3D91'];
+const BLUES = n => n === 3 ? ['#BFD8F7', '#6FA8E8', '#1570D6'] : n === 5 ? ['#BFD8F7', '#93C0F0', '#6FA8E8', '#1570D6', '#0B3D91'] : DONUT_COLS;
+function priceDonut(bands) {
+  return switchDonut(bands.map((b, i) => ({ ...b, c: DONUT_COLS[i] })), { s: 'Lượng bán', rev: 'Doanh thu', sp: 'Số sản phẩm' }, state.donut, 'data-donut');
+}
+
+// key: nếu có, mặc định chỉ hiện 3 dòng đầu và có nút "Xem thêm"
+function rankTable(rows, heads, summary, key, colW = 74) {
+  if (!rows.length) return '<div class="empty">Không có dữ liệu với bộ lọc hiện tại</div>';
+  const cols = `28px minmax(0,1fr) repeat(${heads.length}, ${colW}px)`;
+  const SHORT = 3, open = !key || state.expand[key];
+  const more = key && rows.length > SHORT
+    ? `<button type="button" class="more" data-expand="${key}">${open ? 'Thu gọn ▴' : `Xem thêm · Top ${rows.length} ▾`}</button>` : '';
+  if (!open) rows = rows.slice(0, SHORT);
+  return `<div class="rsum">${summary}</div>
+    <div class="rank">
+      <div class="rk rh" style="grid-template-columns:${cols}"><span></span><span></span>${heads.map(h => `<span class="rv">${h}</span>`).join('')}</div>
+      ${rows.map((r, i) => `
+      <div class="rk ${r.attr ? 'click' : ''}" ${r.attr || ''} style="grid-template-columns:${cols}">
+        <span class="rno ${i < 3 ? 'top' : ''}">${i + 1}</span>
+        <span class="rinfo"><span class="rname" title="${esc(r.name)}">${esc(r.name)}</span><span class="note">${r.sub}</span></span>
+        ${r.vals.map((v, k) => `<span class="rv ${k === 0 ? 'rv1' : ''}">${v}</span>`).join('')}
+      </div>`).join('')}
+    </div>${more}`;
+}
+
+function pageBehavior(arr) {
+  const rated = arr.filter(x => x.n > 0);  const rRev = pearson(arr.map(x => ln1(x.n)), arr.map(x => ln1(x.s)));
+  const rRate = pearson(rated.map(x => x.r), rated.map(x => ln1(x.s)));
+  const priced = arr.filter(x => x.pr > 0);
+  const rPrice = pearson(priced.map(x => Math.log(x.pr)), priced.map(x => ln1(x.s)));
+  const rTiki = pearson(arr.map(x => x.g === 0 ? 1 : 0), arr.map(x => ln1(x.s)));
+  const dv = arr.filter(x => x.disc !== undefined && x.dl >= 0);
+  const rDisc = pearson(dv.map(x => x.disc), dv.map(x => ln1(x.dl)));
+  const factors = [['Số lượt đánh giá', rRev], ['Bán bởi Tiki Trading', rTiki], ['Mức giảm giá', rDisc], ['Giá bán (log)', rPrice], ['Điểm đánh giá', rRate]]
+    .filter(f => !isNaN(f[1])).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
+
+  const revB = REV_BANDS.map(([l, a, b]) => { const g = arr.filter(x => x.n >= a && x.n < b); return { l, med: median(g.map(x => x.s)), n: g.length }; });
+  const rateB = [{ l: 'Chưa có', med: median(arr.filter(x => x.n === 0).map(x => x.s)) },
+    ...RATE_BANDS.map(([l, a, b]) => ({ l, med: median(rated.filter(x => x.r >= a && x.r < b).map(x => x.s)) }))];
+  const tot = sumBy(arr, x => x.s) || 1;
+  const sellers = [0, 1, 2].map(g => { const a = arr.filter(x => x.g === g); return { g, n: a.length, spP: a.length / (arr.length || 1) * 100,
+    sP: sumBy(a, x => x.s) / tot * 100, med: median(a.map(x => x.s)), zero: a.length ? a.filter(x => x.s === 0).length / a.length * 100 : 0, rating: wRating(a) }; });
+  const maxRev = Math.max(...revB.map(b => b.med), 1), maxRate = Math.max(...rateB.map(b => b.med), 1);
+  const m0 = revB[0].med, m1 = revB[1].med;
+
+  return head('02 · Hành vi', 'Yếu tố thúc đẩy lượt mua', 'Thông tin nào trên trang sản phẩm liên quan rõ nhất đến số lượng bán ra: đánh giá, điểm, giá, giảm giá hay người bán.') +
+    kpiRow([['Hệ số tương quan (r)', rTxt(rRev), 'số đánh giá ~ lượng bán (log)'], ['Trung vị lượng bán', fmt(median(arr.map(x => x.s)), 1), 'tất cả sản phẩm'],
+            ['Lượng bán từ sản phẩm có ≥ 50 đánh giá', sumBy(arr, x => x.s) ? pct(sumBy(arr.filter(x => x.n >= 50), x => x.s) / sumBy(arr, x => x.s) * 100) : '—',
+             `chỉ chiếm ${pct(arr.filter(x => x.n >= 50).length / (arr.length || 1) * 100)} số sản phẩm`]]) +
+    `<div class="grid2">
+      ${card('Yếu tố ảnh hưởng đến lượt mua', '', impactList(arr))}
+      ${card('Nhóm người bán', '', sellerShare(sellers))}
+    </div>` +
+    card('Lượng bán theo số lượt đánh giá và điểm TB', tag('Trung vị lượng bán'), reviewRatingHeat(arr));
+}
+
+// Ma trận nhiệt: hàng = số lượt đánh giá, cột = điểm, ô = trung vị lượng bán (màu theo thang log)
+function reviewRatingHeat(arr) {
+  const RB = REV_BANDS.slice(1); // bỏ nhóm 0 đánh giá vì chưa có điểm
+  const CB = [['< 4★', 0, 4], ['4–4,5★', 4, 4.5], ['4,5–4,8★', 4.5, 4.8], ['4,8–5★', 4.8, 5.01]];
+  const rated = arr.filter(x => x.n > 0);
+  const inR = (x, b) => x.n >= b[1] && x.n < b[2], inC = (x, b) => x.r >= b[1] && x.r < b[2];
+  const stat = g => ({ v: g.length >= 20 ? median(g.map(x => x.s)) : null, n: g.length });
+  const grid = RB.map(rb => CB.map(cb => stat(rated.filter(x => inR(x, rb) && inC(x, cb)))));
+  const max = Math.max(1, ...grid.flat().map(c => c.v || 0));
+  const mix = t => { const a = [238, 245, 255], b = [11, 61, 145]; return `rgb(${a.map((x, i) => Math.round(x + (b[i] - x) * t)).join(',')})`; };
+  const td = (c, cls = '') => {
+    if (c.v === null) return `<td class="hm-na ${cls}" title="${fmt(c.n)} sản phẩm (quá ít để tính)">—</td>`;
+    const t = ln1(c.v) / ln1(max);
+    return `<td class="${cls}" style="background:${mix(t)};color:${t > 0.55 ? '#fff' : '#0B1F3A'}" title="${fmt(c.n)} sản phẩm">${fmt(c.v)}</td>`;
+  };
+  if (!rated.length) return '<div class="empty">Không có dữ liệu với bộ lọc hiện tại</div>';
+  return `<div class="tbl"><table class="hm">
+    <thead><tr><th class="rl hm-ax" rowspan="2">Số lượt đánh giá</th><th class="hm-grp" colspan="${CB.length}">Điểm TB sản phẩm</th></tr>
+    <tr>${CB.map(c => `<th>${c[0]}</th>`).join('')}</tr></thead>
+    <tbody>${RB.map((rb, i) => `<tr><th class="rl">${rb[0]}</th>${grid[i].map(c => td(c)).join('')}</tr>`).join('')}</tbody>
+  </table></div>
+  <div class="hm-scale"><span>Bán ít</span><i></i><span>Bán nhiều</span></div>`;
+}
+
+// Phân bố số sao thật của từng lượt đánh giá (1★…5★), cộng theo các sản phẩm đang lọc.
+// Cần file review_stars.csv (product_id, rating, n) xuất từ bảng fact_review trên Supabase.
+function starDist(arr) {
+  if (!HAS_STARS) return `<div class="empty">Cần dữ liệu từng lượt đánh giá (1★–5★) từ Supabase.<br>
+    Đặt file <b>review_stars.csv</b> vào thư mục dashboard_mockup rồi chạy lại build.ps1.</div>`;
+  const c = [0, 0, 0, 0, 0];
+  for (const x of arr) if (x.st) for (let i = 0; i < 5; i++) c[i] += x.st[i];
+  const tot = c.reduce((a, b) => a + b, 0);
+  if (!tot) return '<div class="empty">Không có đánh giá với bộ lọc hiện tại</div>';
+  const cols = BLUES(5), neg = (c[0] + c[1]) / tot * 100;
+  return `<div class="donut-wrap">
+    ${donutSvg(c.map((v, i) => ({ l: (i + 1) + '★', v: v / tot * 100, c: cols[i] })), pct(neg), 'tiêu cực (1–2★)', 180)}
+    <table class="dleg"><thead><tr><th>Số sao</th><th class="r">% lượt</th><th class="r">Số lượt</th></tr></thead>
+      <tbody>${c.map((v, i) => `<tr><td><i style="background:${cols[i]}"></i>${i + 1}★</td>
+        <td class="r cur">${pct(v / tot * 100)}</td><td class="r">${fmt(v)}</td></tr>`).join('')}</tbody></table>
+  </div>`;
+}
+
+// Sản phẩm điểm thấp (< 4★): donut phân bổ theo Người bán / Mức giá (2 tab).
+// Bảng: tỷ trọng trong tổng SP điểm thấp + tỷ lệ điểm thấp ngay trong nhóm đó.
+function lowDonut(rated) {
+  const low = rated.filter(x => x.r < 4), tot = low.length || 1;
+  const byPrice = state.lowTab === 'pb';
+  const defs = byPrice
+    ? PBANDS.map((l, b) => ({ l, f: x => x.pb === b, c: BLUES(4)[b] }))
+    : [0, 1, 2].map(g => ({ l: GSHORT[g], f: x => x.g === g, c: BLUES(3)[g] }));
+  const items = defs.map(d => { const all = rated.filter(d.f), lw = low.filter(d.f).length;
+    return { l: d.l, c: d.c, share: lw / tot * 100, rate: all.length ? lw / all.length * 100 : 0 }; });
+  const top = items.reduce((a, b) => b.share > a.share ? b : a, items[0]);
+  return `<div class="dseg" role="group" aria-label="Phân theo">${[['g', 'Người bán'], ['pb', 'Mức giá']].map(([k, l]) =>
+      `<button type="button" class="${(byPrice ? 'pb' : 'g') === k ? 'active' : ''}" data-lowtab="${k}">${l}</button>`).join('')}</div>
+    <div class="donut-wrap">
+      ${donutSvg(items.map(it => ({ l: it.l, v: it.share, c: it.c })), pct(top.share), top.l, 180)}
+      <table class="dleg"><tbody>${items.map(it => `<tr class="${it === top ? 'on' : ''}" title="${pct(it.rate)} sản phẩm trong nhóm này có điểm TB dưới 4★"><td><i style="background:${it.c}"></i>${it.l}</td>
+          <td class="r cur">${pct(it.share)}</td></tr>`).join('')}</tbody></table>
+    </div>
+    <div class="note">Tỷ lệ sản phẩm có điểm TB dưới 4★ trong từng nhóm:&nbsp;${items.map(it => `${it.l} <b style="color:var(--ink)">${pct(it.rate)}</b>`).join(' · ')}</div>`;
+}
+
+// Top yếu tố để bán chạy: xếp theo mức chênh lệch giữa nhóm tốt và nhóm kém.
+// Mức độ hiển thị bằng chấm tròn + chữ; bằng chứng là một câu có số thật.
+function impactList(arr) {
+  const med = f => median(arr.filter(f).map(x => x.s));
+  const soldP = f => { const g = arr.filter(f); return g.length ? g.filter(x => x.s > 0).length / g.length * 100 : 0; };
+  const n = v => fmt(v, v > 0 && v < 10 && v % 1 ? 1 : 0);
+  const rows = [];
+  { const lo = med(x => x.n >= 1 && x.n < 10), hi = med(x => x.n >= 50);
+    rows.push({ name: 'Số lượt đánh giá', lo, hi, text: `Từ 50 đánh giá bán <b>${n(hi)}</b> · 1–9 đánh giá bán ${n(lo)}` }); }
+  { const lo = med(x => x.g === 2), hi = med(x => x.g === 0);
+    rows.push({ name: 'Bán bởi Tiki Trading', lo, hi, text: `Tiki Trading bán <b>${n(hi)}</b> · người bán thường bán ${n(lo)}` }); }
+  const dv = arr.filter(x => x.disc !== undefined && x.dl >= 0);
+  if (dv.length) {
+    const sp = g => g.length ? g.filter(x => x.dl > 0).length / g.length * 100 : 0;
+    let lo = sp(dv.filter(x => x.disc < 0.5)), hi = sp(dv.filter(x => x.disc > 20.5));
+    if (HAS_SERIES) {   // theo từng sản phẩm-ngày: nhóm giảm trên 20% = hai nhóm cuối của DISC_BANDS
+      const b = dayBands(arr), nHi = b[3].n + b[4].n;
+      lo = b[0].sellP; hi = nHi ? (b[3].sellP * b[3].n + b[4].sellP * b[4].n) / nHi : 0;
+    }
+    rows.push({ name: 'Giảm giá trên 20%', lo, hi, text: `<b>${pct(hi, 0)}</b> sản phẩm có bán ${HAS_SERIES ? 'trong ngày' : 'trong 3 ngày'} · không giảm chỉ ${pct(lo, 0)}` });
+  }
+  { const lo = med(x => x.n > 0 && x.r < 4), hi = med(x => x.n > 0 && x.r >= 4.5);
+    rows.push({ name: 'Điểm TB từ 4,5★', lo, hi, text: `Từ 4,5★ bán <b>${n(hi)}</b> · dưới 4★ bán ${n(lo)}` }); }
+  { const lo = soldP(x => x.pb === 3), hi = soldP(x => x.pb === 0);
+    rows.push({ name: 'Giá dưới 100k', lo, hi, text: `<b>${pct(hi, 0)}</b> sản phẩm đã bán được · trên 2 triệu chỉ ${pct(lo, 0)}` }); }
+
+  rows.forEach(r => { r.x = r.lo > 0 ? r.hi / r.lo : (r.hi > 0 ? 100 : 1); });
+  rows.sort((a, b) => b.x - a.x);
+  const level = x => x >= 80 ? [5, 'Rất cao'] : x >= 20 ? [4, 'Cao'] : x >= 5 ? [3, 'Trung bình'] : x >= 1.5 ? [2, 'Thấp'] : [1, 'Rất thấp'];
+
+  return `<div class="tf">${rows.map((r, i) => { const [d, lt] = level(r.x);
+    return `<div class="tfr">
+      <span class="rno ${i < 3 ? 'top' : ''}">${i + 1}</span>
+      <div class="tfm">
+        <div class="tfh"><b>${r.name}</b><span class="tfl"><span class="dots">${'<i class="on"></i>'.repeat(d)}${'<i></i>'.repeat(5 - d)}</span><span class="tfw">${lt}</span></span></div>
+        <span class="tft" title="Trung vị lượng bán hoặc tỷ lệ sản phẩm có bán">${r.text}</span>
+      </div>
+    </div>`; }).join('')}</div>`;
+}
+
+// (không còn dùng) Mức độ liên quan: thanh theo độ mạnh |r| trên nền 3 vùng Yếu / Vừa / Mạnh;
+// màu xanh = cùng chiều, cam = ngược chiều; dòng phụ diễn giải bằng lời
+const FACTOR_TEXT = {
+  'Số lượt đánh giá': ['Càng nhiều đánh giá, bán càng nhiều', 'Càng nhiều đánh giá, bán càng ít'],
+  'Bán bởi Tiki Trading': ['SP của Tiki Trading bán nhiều hơn', 'SP của Tiki Trading bán ít hơn'],
+  'Giá bán (log)': ['Giá càng cao, bán càng nhiều', 'Giá càng cao, bán càng ít'],
+  'Mức giảm giá': ['Giảm giá sâu hơn, bán nhiều hơn', 'Giảm giá sâu hơn, bán ít hơn'],
+  'Điểm đánh giá': ['Điểm cao hơn, bán nhiều hơn một chút', 'Điểm cao hơn, bán ít hơn']
+};
+function divergingR(factors) {
+  return `<div class="fr">
+    <div class="frz"><span style="width:30%">Yếu</span><span style="width:20%">Vừa</span><span style="width:50%">Mạnh</span></div>
+    ${factors.map(([l, r]) => {
+      const t = FACTOR_TEXT[l] || ['', ''];
+      return `<div class="frr">
+        <div class="frtop"><b>${l === 'Giá bán (log)' ? 'Giá bán' : l}</b><span class="note">${r >= 0 ? t[0] : t[1]}</span><span class="frv ${r < 0 ? 'neg' : ''}">${rTxt(r)}</span></div>
+        <span class="frt"><span class="frb ${r < 0 ? 'neg' : ''}" style="width:${Math.abs(r) * 100}%"></span></span></div>`; }).join('')}
+    <div class="legend" style="justify-content:flex-end"><span><i style="background:var(--bar)"></i>Cùng chiều</span><span><i style="background:var(--chinhhang)"></i>Ngược chiều</span></div>
+  </div>`;
+}
+
+// Donut dùng chung: segs = [{ l, v (%), c (màu) }], chữ lớn + chữ nhỏ ở giữa vòng
+function donutSvg(segs, big, small, size = 160, bigColor = '#0B1F3A') {
+  const c = size / 2, sw = size * 0.15, R = c - sw / 2 - 2, C = 2 * Math.PI * R;
+  let off = 0;
+  const arcs = segs.map(s => {
+    const len = s.v / 100 * C, gap = len > 3 ? 2 : 0;
+    const a = `<circle r="${R}" cx="${c}" cy="${c}" fill="none" stroke="${s.c}" stroke-width="${sw}"
+      stroke-dasharray="${Math.max(0, len - gap)} ${C - len + gap}" stroke-dashoffset="${-off}" transform="rotate(-90 ${c} ${c})"><title>${s.l}: ${pct(s.v)}</title></circle>`;
+    off += len; return a;
+  }).join('');
+  return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" role="img" aria-label="${small}: ${big}">${arcs}
+    <text x="${c}" y="${c - 2}" text-anchor="middle" font-size="${Math.round(size * 0.13)}" font-weight="700" fill="${bigColor}">${big}</text>
+    <text x="${c}" y="${c + size * 0.1}" text-anchor="middle" font-size="12" fill="#5B6675">${small}</text></svg>`;
+}
+
+// Nhóm người bán: donut có nút chuyển Số sản phẩm / Lượng bán (cùng kiểu Cơ cấu theo mức giá) + bảng chỉ số
+function sellerShare(sellers) {
+  return switchDonut(sellers.map(s => ({ l: GSHORT[s.g], c: BLUES(3)[s.g], spP: s.spP, sP: s.sP })),
+      { spP: 'Số sản phẩm', sP: 'Lượng bán' }, state.sellerMetric, 'data-smetric') + `
+    <table class="stbl"><thead><tr><th>Nhóm</th><th class="r">Trung vị bán</th><th class="r">Điểm TB</th><th class="r">Chưa bán</th></tr></thead>
+    <tbody>${sellers.map(s => `<tr><td><span class="dot" style="background:${BLUES(3)[s.g]};border-radius:2px;margin-right:7px"></span>${GSHORT[s.g]}</td>
+      <td class="r"><b>${fmt(s.med)}</b></td><td class="r">${s.rating ? fmt(s.rating, 2) + '★' : '—'}</td><td class="r">${pct(s.zero)}</td></tr>`).join('')}</tbody></table>`;
+}
+
+// Cột bậc thang theo thang log (để nhóm nhỏ vẫn nhìn thấy), nhãn là số thật; cột cao nhất tô đậm
+function stepCols(rows, dec) {
+  const max = Math.max(...rows.map(r => r[1]), 1);
+  return vcols(rows.map(([l, v]) => ({ l, v: ln1(v), t: fmt(v, dec), cls: v === max ? 'hi' : '' })), ln1(max), 120);
+}
+
+function pageReview(arr) {
+  const rated = arr.filter(x => x.n > 0), low = lowRated(arr), hot = hotLow(arr);
+  const lowP = low.length / (rated.length || 1) * 100;
+  const dist = RATE_BANDS.map(([l, a, b]) => { const n = rated.filter(x => x.r >= a && x.r < b).length; return { l, n, p: n / (rated.length || 1) * 100, bad: b <= 4 }; });
+  // Chỉ số xếp hạng của hai thẻ Danh mục và Thương hiệu: 'n' = số lượt đánh giá 1–2★, 'p' = tỷ lệ 1–2★
+  const lowM = state.lowMetric === 'p' ? 'p' : 'n';
+  // Danh mục: có số sao thật thì xếp theo chỉ số đang chọn; chưa có thì giữ cách cũ (% sản phẩm dưới 4★)
+  const cAgg = new Map();
+  if (HAS_STARS) for (const x of arr) if (x.st) {
+    let o = cAgg.get(x.c); if (!o) { o = { name: RAW.cats[x.c], c: x.c, rv: 0, lo: 0 }; cAgg.set(x.c, o); }
+    o.rv += x.st[0] + x.st[1] + x.st[2] + x.st[3] + x.st[4]; o.lo += x.st[0] + x.st[1];
+  }
+  const topLowCats = HAS_STARS
+    ? [...cAgg.values()].filter(c => lowM === 'n' || c.rv >= 200).map(c => ({ ...c, lowP: c.lo / c.rv * 100 }))
+        .sort((a, b) => lowM === 'n' ? b.lo - a.lo : b.lowP - a.lowP).slice(0, state.topn)
+    : catTable(arr).filter(c => c.rated >= 30).sort((a, b) => b.lowP - a.lowP).slice(0, state.topn);
+  const grpLow = [0, 1, 2].map(g => { const r = rated.filter(x => x.g === g); return { label: GSHORT[g], v: r.length ? r.filter(x => x.r < 4).length / r.length * 100 : 0, n: r.length }; });
+  const pbLow = PBANDS.map((l, b) => { const r = rated.filter(x => x.pb === b); return { label: l, v: r.length ? r.filter(x => x.r < 4).length / r.length * 100 : 0, n: r.length }; });
+  // Thương hiệu: có số sao thật thì xếp theo số lượt đánh giá 1–2★ (từ 200 lượt, bỏ OEM); chưa có thì giữ cách cũ (điểm TB thấp nhất)
+  const bAgg = new Map();
+  if (HAS_STARS) {
+    for (const x of arr) if (x.st) {
+      let o = bAgg.get(x.b); if (!o) { o = { name: RAW.brands[x.b], sp: 0, rv: 0, lo: 0 }; bAgg.set(x.b, o); }
+      o.sp++; o.rv += x.st[0] + x.st[1] + x.st[2] + x.st[3] + x.st[4]; o.lo += x.st[0] + x.st[1];
+    }
+  } else for (const x of rated) { let o = bAgg.get(x.b); if (!o) { o = { name: RAW.brands[x.b], sp: 0, rv: 0, w: 0, low: 0, s: 0 }; bAgg.set(x.b, o); } o.sp++; o.rv += x.n; o.w += x.r * x.n; o.s += x.s; if (x.r < 4) o.low++; }
+  const badBrands = HAS_STARS
+    ? [...bAgg.values()].filter(b => b.rv >= (lowM === 'n' ? 200 : 1000) && b.name !== 'OEM').map(b => ({ ...b, lowP: b.lo / b.rv * 100 }))
+        .sort((a, b) => lowM === 'n' ? b.lo - a.lo : b.lowP - a.lowP).slice(0, state.topn)
+    : [...bAgg.values()].filter(b => b.rv >= 50 && b.sp >= 3 && b.name !== 'OEM').map(b => ({ ...b, rating: b.w / b.rv, lowP: b.low / b.sp * 100 }))
+        .sort((a, b) => a.rating - b.rating).slice(0, state.topn);
+  const maxLow = Math.max(...grpLow.map(g => g.v), ...pbLow.map(g => g.v), 1);
+  const ASPECTS = ['Chất lượng sản phẩm', 'Giao hàng', 'Đúng mô tả', 'Đóng gói', 'Giá cả', 'Người bán – CSKH', 'Hàng chính hãng'];
+  // Nút chuyển chỉ số dùng chung cho hai thẻ Danh mục và Thương hiệu, và dòng biểu đồ tương ứng
+  const lowSeg = `<div class="dseg" role="group" aria-label="Chỉ số">${[['n', 'Số lượt 1–2★'], ['p', 'Tỷ lệ 1–2★']].map(([k, l]) =>
+    `<button type="button" class="${lowM === k ? 'active' : ''}" data-lowmetric="${k}">${l}</button>`).join('')}</div>`;
+  const lowNote = t => `<div style="margin:-2px 0 4px;font-size:11.5px;color:var(--muted)">${t}</div>`;
+  const lowRow = (name, lo, rv, p, extra = '') => ({ label: name, v: lowM === 'n' ? lo : p, t: lowM === 'n' ? fmt(lo) : pct(p),
+    s: lowM === 'n' ? pct(p) : fmt(lo) + ' lượt', tip: `${fmt(lo)} / ${fmt(rv)} lượt đánh giá${extra}`, color: 'var(--bad)' });
+  const lowMax = list => list[0] ? (lowM === 'n' ? list[0].lo : list[0].lowP) : 1;
+  // Nút quay lại thẻ danh mục: chỉ hiện khi đang lọc một danh mục (dùng chung cơ chế data-cat, -1 = tất cả)
+  const catBack = state.cat >= 0 ? '<button type="button" class="go" data-cat="-1" style="margin:0 0 8px">← Tất cả danh mục</button>' : '';
+  // Khía cạnh phàn nàn: % trên tổng đánh giá 1–2★ có nội dung (một đánh giá có thể nhắc nhiều khía cạnh)
+  const negTot = HAS_ASP ? sumBy(arr, x => x.as ? x.as[0] : 0) : 0;
+  const aspRows = ASPECTS.map((a, i) => ({ a, n: sumBy(arr, x => x.as ? x.as[i + 1] : 0) })).sort((p, q) => q.n - p.n);
+  const aspCard = HAS_ASP
+    ? card('Nhóm vấn đề khách hàng phản ánh', tag('% đánh giá 1–2★', 'bad'), negTot
+        ? hbars(aspRows.map(r => ({ label: r.a, v: r.n, t: pct(r.n / negTot * 100), s: fmt(r.n) + ' lượt', tip:`${fmt(r.n)} / ${fmt(negTot)} đánh giá 1–2★ có nội dung`, color: 'var(--bad)' })), aspRows[0].n || 1, { lw: 150, w: 46, zebra: true, fill: true })
+        : '<div class="empty">Không có đánh giá 1–2★ với bộ lọc hiện tại</div>')
+    : card('Nhóm vấn đề khách hàng phản ánh', tag('Chưa có dữ liệu', 'wait'),
+        `<div class="hb">${ASPECTS.map(a => `<div class="hr" style="grid-template-columns:150px minmax(0,1fr)"><span class="lb">${a}</span><span class="tr"><span class="bar" style="width:60%;background:var(--line-2)"></span><span class="vs">—</span></span></div>`).join('')}</div>`);
+
+  return head('03 · Đánh giá', 'Vấn đề cần khắc phục', 'Tập trung vào những điểm chưa tốt: sản phẩm, danh mục, nhóm người bán và thương hiệu đang bị khách hàng chấm điểm thấp.', true) +
+    kpiRow([['Sản phẩm có điểm TB < 4★', pct(lowP), fmt(low.length) + ' sản phẩm có đánh giá', true], ['Bán chạy nhưng điểm thấp', fmt(hot.length), 'từ 10 đánh giá, điểm TB < 4★', true],
+            ['Chưa có đánh giá', pct((arr.length - rated.length) / (arr.length || 1) * 100), 'sản phẩm', true],
+            ['Điểm TB sản phẩm', fmt(wRating(arr), 2) + ' ★'], ['Lượt đánh giá', fmt(sumBy(arr, x => x.n))]]) +
+    card('Phân bố số sao của đánh giá', HAS_STARS ? tag('1–2★ cần khắc phục', 'bad') : tag('Chờ dữ liệu', 'wait'), starDist(arr), 'neg') +
+    `<div class="grid2">
+      ${HAS_STARS
+        ? card(`Top ${state.topn} danh mục theo đánh giá 1–2★`, '', catBack + lowSeg
+            + lowNote(lowM === 'n' ? 'Xếp theo số lượt đánh giá 1–2★; số nhỏ bên phải là tỷ lệ trên tổng lượt đánh giá của danh mục' : 'Xếp theo tỷ lệ đánh giá 1–2★; chỉ gồm danh mục từ 200 lượt đánh giá')
+            + hbars(topLowCats.map(c => ({ ...lowRow(c.name, c.lo, c.rv, c.lowP), click: c.c })), lowMax(topLowCats), { lw: 170, w: 40, zebra: true }), 'neg')
+        : card(`Top ${state.topn} danh mục có tỷ lệ điểm thấp cao nhất`, tag('% sản phẩm dưới 4★', 'bad'), catBack + hbars(topLowCats.map(c => ({ label: c.name, v: c.lowP, t: pct(c.lowP), tip: `Điểm TB ${fmt(c.rating, 2)}★ · ${fmt(c.rated)} SP có đánh giá`, color: 'var(--bad)', click: c.c })), topLowCats[0] ? topLowCats[0].lowP : 1, { lw: 170, w: 62, zebra: true }), 'neg')}
+      ${card('Sản phẩm có điểm TB < 4★ theo người bán và mức giá', tag(fmt(low.length) + ' sản phẩm', 'bad'), lowDonut(rated), 'neg')}
+    </div>` +
+    card(`Sản phẩm cần xử lý ngay · bán chạy nhưng điểm TB dưới 4★ (Top ${state.topn})`, tag(fmt(hot.length) + ' sản phẩm', 'bad'), table([
+      { h: '#', f: x => hot.indexOf(x) + 1 },
+      { h: 'Sản phẩm', f: x => `<div class="pname" title="${esc(x.name)}">${esc(x.name)}</div>` },
+      { h: 'Danh mục', f: x => esc(RAW.cats[x.c]) }, { h: 'Người bán', f: x => GSHORT[x.g] },
+      { h: 'Điểm TB', f: x => `<span class="pill bad">${fmt(x.r, 1)}★</span>`, r: 1 }, { h: 'Lượt đánh giá', f: x => fmt(x.n), r: 1 }, { h: 'Đã bán', f: x => fmt(x.s), r: 1 }],
+      hot.slice(0, state.topn)), 'neg') +
+    `<div class="grid2">
+      ${HAS_STARS
+        ? card(`Top ${state.topn} thương hiệu theo đánh giá 1–2★`, '', lowSeg
+            + lowNote(lowM === 'n' ? 'Xếp theo số lượt đánh giá 1–2★; số nhỏ bên phải là tỷ lệ trên tổng lượt đánh giá của thương hiệu' : 'Xếp theo tỷ lệ đánh giá 1–2★; chỉ gồm thương hiệu từ 1.000 lượt đánh giá')
+            + hbars(badBrands.map(b => lowRow(b.name, b.lo, b.rv, b.lowP, ` · ${fmt(b.sp)} sản phẩm`)), lowMax(badBrands), { lw: 170, w: 40, zebra: true }), 'neg')
+        : card(`Thương hiệu bị chấm thấp nhất (Top ${state.topn})`, '', table([
+            { h: 'Thương hiệu', f: b => esc(b.name) }, { h: 'Sản phẩm', f: b => fmt(b.sp), r: 1 }, { h: 'Lượt đánh giá', f: b => fmt(b.rv), r: 1 },
+            { h: 'Điểm TB', f: b => `<span class="pill ${b.rating < 4.5 ? 'bad' : 'ok'}">${fmt(b.rating, 2)}★</span>`, r: 1 },
+            { h: '% sản phẩm < 4★', f: b => `<span class="mini" style="width:${Math.max(2, b.lowP * 0.5)}px"></span>${pct(b.lowP, 0)}`, r: 1 }], badBrands), 'neg')}
+      ${aspCard}
+    </div>`;
+}
+
+// Biểu đồ đường (SVG): pts = [{ x: nhãn trục, v: giá trị, tip: chú thích khi rê chuột }]; o.ma = đường trung bình trượt (null = chưa đủ dữ liệu);
+// o.mark = chỉ số điểm cần đánh dấu bằng đường đứt nét; o.fy = hàm định dạng nhãn trục dọc theo bước chia; o.color = màu đường chính
+function niceStep(x) { const p = Math.pow(10, Math.floor(Math.log10(x || 1))); return [1, 2, 2.5, 5, 10].map(m => m * p).find(s => s >= x) || 10 * p; }
+function lineChart(pts, o = {}) {
+  const W = 960, H = 250, L = 48, R = 16, T = 22, B = 30, n = pts.length, ma = o.ma || [];
+  const maxV = Math.max(...pts.map(p => p.v), ...ma.filter(v => v != null), 1), step = niceStep(maxV / 4), top = Math.ceil(maxV / step) * step;
+  const X = i => L + (n > 1 ? i * (W - L - R) / (n - 1) : 0), Y = v => T + (H - T - B) * (1 - v / top);
+  const col = o.color || 'var(--bar)', muted = '#5B6675';
+  let grid = ''; for (let g = 0; g <= top + step / 1e6; g += step) grid += `<line x1="${L}" x2="${W - R}" y1="${Y(g)}" y2="${Y(g)}" stroke="#E6EAF0" stroke-width="1"/>
+      <text x="${L - 8}" y="${Y(g) + 4}" text-anchor="end" font-size="11" fill="${muted}">${o.fy ? o.fy(g, step) : fmt(g)}</text>`;
+  const every = Math.max(1, Math.ceil(n / 9)); let xl = '';
+  pts.forEach((p, i) => { if (i % every === 0 || i === n - 1) xl += `<text x="${X(i)}" y="${H - 8}" text-anchor="middle" font-size="11" fill="${muted}">${p.x}</text>`; });
+  const path = vs => vs.map((v, i) => v == null ? null : `${X(i)},${Y(v)}`).filter(Boolean).map((c, k) => (k ? 'L' : 'M') + c).join(' ');
+  const mark = o.mark >= 0 ? `<line x1="${X(o.mark)}" x2="${X(o.mark)}" y1="${T - 6}" y2="${H - B}" stroke="${muted}" stroke-width="1" stroke-dasharray="4 3"/>
+      <text x="${X(o.mark)}" y="${T - 9}" text-anchor="middle" font-size="11" font-weight="700" fill="${muted}">${o.markLabel || ''}</text>` : '';
+  const dots = pts.map((p, i) => `<circle cx="${X(i)}" cy="${Y(p.v)}" r="${ma.length ? 2.5 : 3.5}" style="fill:${ma.length ? '#9FC3EE' : col}"><title>${p.tip}</title></circle>`).join('');
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block" role="img" aria-label="Biểu đồ đường">${grid}${xl}${mark}
+    <path d="${path(pts.map(p => p.v))}" fill="none" style="stroke:${ma.length ? '#BFD8F7' : col}" stroke-width="${ma.length ? 1.5 : 2.5}" stroke-linejoin="round"/>
+    ${ma.length ? `<path d="${path(ma)}" fill="none" style="stroke:${col}" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>` : ''}${dots}</svg>`;
+}
+
+// Tổng hợp theo ngày cho các sản phẩm đang lọc (cần chuỗi theo ngày)
+function dailyAgg(arr) {
+  const z = () => new Array(ND).fill(0);
+  const a = { n: z(), sold: z(), disc: z(), discSum: z(), oos: z() };
+  for (const x of arr) if (x.sr) for (let i = 0; i < ND; i++) {
+    if (x.sr[i] < 0) continue;
+    const u = unpackDay(x.sr[i]);
+    a.n[i]++; if (u.sold > 0) a.sold[i] += u.sold;
+    if (u.disc > 0) { a.disc[i]++; a.discSum[i] += u.disc; }
+    if (u.oos) a.oos[i]++;
+  }
+  return a;
+}
+
+function pageTrend(arr) {
+  if (!HAS_SERIES) return pageTrendLegacy(arr);
+  const ag = dailyAgg(arr), last = ND - 1, has = ag.n[last] > 0;
+  const discP = i => ag.n[i] ? ag.disc[i] / ag.n[i] * 100 : 0, oosP = i => ag.n[i] ? ag.oos[i] / ag.n[i] * 100 : 0;
+  const discAvg = i => ag.disc[i] ? ag.discSum[i] / ag.disc[i] : 0;
+  let i11 = -1; for (let i = 0; i < ND; i++) { const d = dayDate(i); if (d.getMonth() === 10 && d.getDate() === 11) { i11 = i; break; } }
+  const meanOf = (f, from = 0) => { let s = 0, c = 0; for (let i = from; i < ND; i++) if (i !== i11 && ag.n[i]) { s += f(i); c++; } return c ? s / c : 0; };
+  let avgSold = 0, nSold = 0; for (let i = 1; i < ND; i++) if (ag.n[i]) { avgSold += ag.sold[i]; nSold++; } avgSold = nSold ? avgSold / nSold : 0;
+  const ds = discountStats(arr), b0 = ds.bands[0].sellP, best = ds.bands.slice().sort((a, b) => b.sellP - a.sellP)[0], maxSell = Math.max(...ds.bands.map(b => b.sellP), 1);
+  const note = t => `<div style="margin:-2px 0 4px;font-size:11.5px;color:var(--muted)">${t}</div>`;
+  const sg = (v, u) => (v > 0.05 ? '+' : v < -0.05 ? '−' : '') + fmt(Math.abs(v), 1) + u;
+  const empty = '<div class="empty">Danh mục đang chọn chưa có dữ liệu giá hằng ngày</div>';
+
+  // Diễn biến theo ngày: lượt bán / sản phẩm giảm giá / hết hàng
+  const m = ['s', 'd', 'o'].includes(state.trendMetric) ? state.trendMetric : 's';
+  const val = i => m === 's' ? ag.sold[i] : m === 'd' ? discP(i) : oosP(i);
+  // Biểu đồ đường theo ngày. Lượt bán dao động mạnh nên vẽ thêm đường trung bình trượt 7 ngày (từ ngày thứ 4 trở đi) để thấy xu hướng.
+  const from = m === 's' ? 1 : 0, pts = [];
+  for (let i = from; i < ND; i++) { const v = val(i);
+    pts.push({ x: dayTxt(i), v, tip: `${dayTxt(i, true)}: ${m === 's' ? fmt(v) + ' lượt bán' : pct(v, 1)}` }); }
+  const maLine = m === 's' ? pts.map((p, k) => { const w = pts.slice(Math.max(0, k - 6), k + 1); return w.length >= 4 ? w.reduce((s, q) => s + q.v, 0) / w.length : null; }) : [];
+  const lineSvg = lineChart(pts, { ma: maLine, mark: i11 >= from ? i11 - from : -1, markLabel: '11/11', color: m === 'o' ? 'var(--bad)' : 'var(--bar)',
+    fy: (g, st) => m === 's' ? (st >= 1000 ? fmt(g / 1000, 0) + 'k' : fmt(g)) : fmt(g, st < 1 ? 1 : 0) + '%' });
+  const legend = m === 's' ? '<div class="legend" style="justify-content:flex-end"><span><i style="background:#BFD8F7"></i>Theo ngày</span><span><i style="background:var(--bar)"></i>Trung bình 7 ngày</span></div>' : '';
+  const seg = `<div class="dseg" role="group" aria-label="Chỉ số">${[['s', 'Lượt bán'], ['d', 'Sản phẩm giảm giá'], ['o', 'Hết hàng']].map(([k, l]) =>
+    `<button type="button" class="${m === k ? 'active' : ''}" data-trendmetric="${k}">${l}</button>`).join('')}</div>`;
+  const NOTE = { s: 'Tổng lượt bán mỗi ngày của các sản phẩm đang theo dõi; số liệu “đã bán” cập nhật theo đợt nên dao động mạnh giữa các ngày',
+                 d: 'Tỷ lệ sản phẩm đang giảm giá mỗi ngày', o: 'Tỷ lệ sản phẩm hết hàng mỗi ngày' };
+  const dailyCard = card('Diễn biến theo ngày', tag(dayTxt(0, true) + ' – ' + dayTxt(last, true)),
+    has ? seg + note(NOTE[m]) + legend + lineSvg : empty);
+
+  // Hiệu ứng ngày 11/11: so với trung bình các ngày còn lại
+  const hit = i11 >= 0 && ag.n[i11] > 0, avgOther = meanOf(i => ag.sold[i], 1), ratio = hit && avgOther ? ag.sold[i11] / avgOther : 0;
+  const verdict = ratio >= 1.05 ? 'Lượt bán ngày 11/11 cao hơn mức trung bình các ngày khác' : ratio <= 0.95
+    ? 'Chưa ghi nhận lượt bán tăng trong ngày 11/11 so với các ngày khác' : 'Lượt bán ngày 11/11 ngang mức trung bình các ngày khác';
+  const effRows = hit ? [
+    ['Lượt bán', fmt(ag.sold[i11]), fmt(avgOther), sg((ratio - 1) * 100, '%')],
+    ['Sản phẩm giảm giá', pct(discP(i11)), pct(meanOf(discP)), sg(discP(i11) - meanOf(discP), ' điểm %')],
+    ['Mức giảm trung bình', pct(discAvg(i11)), pct(meanOf(discAvg)), sg(discAvg(i11) - meanOf(discAvg), ' điểm %')],
+    ['Hết hàng', pct(oosP(i11)), pct(meanOf(oosP)), sg(oosP(i11) - meanOf(oosP), ' điểm %')]] : [];
+  const effCard = card('Hiệu ứng ngày 11/11', '', hit
+    ? `<div class="par col"><div class="stat"><span class="big">× ${fmt(ratio, 1)}</span><span class="s">lượt bán ngày 11/11 so với trung bình các ngày khác</span></div>
+       <div>${table([{ h: 'Chỉ số', f: r => r[0] }, { h: 'Ngày 11/11', f: r => r[1], r: 1 }, { h: 'TB ngày khác', f: r => r[2], r: 1 }, { h: 'Chênh lệch', f: r => r[3], r: 1 }], effRows)}</div></div>` + note(verdict)
+    : '<div class="empty">Chưa có dữ liệu ngày 11/11 với bộ lọc hiện tại</div>');
+
+  // Lượt bán trung bình mỗi ngày theo danh mục
+  const catD = new Map();
+  for (const x of arr) if (x.sr) {
+    let o = catD.get(x.c); if (!o) { o = { name: RAW.cats[x.c], c: x.c, s: 0, n: 0, disc: 0 }; catD.set(x.c, o); }
+    o.n++; if (x.disc > 0) o.disc++;
+    for (let i = 1; i < ND; i++) if (x.sr[i] >= 0) { const u = unpackDay(x.sr[i]); if (u.sold > 0) o.s += u.sold; }
+  }
+  const catRows = [...catD.values()].map(o => ({ ...o, dl: o.s / (ND - 1) })).sort((a, b) => b.dl - a.dl);
+  const years = []; for (let y = 2017; y <= 2026; y++) years.push({ y, n: arr.filter(x => x.y === y).length });
+  const maxY = Math.max(...years.map(y => y.n), 1);
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const EVENTS = [['2026-11-11', 'Ngày đôi 11.11'], ['2026-11-27', 'Black Friday'], ['2026-12-12', 'Ngày đôi 12.12'], ['2027-01-01', 'Năm mới'],
+                  ['2027-01-27', 'Trước Tết (10 ngày)'], ['2027-02-06', 'Tết Đinh Mùi'], ['2027-03-03', 'Ngày đôi 3.3']]
+    .map(([d, e]) => { const dt = new Date(d + 'T00:00:00'); return { d: dt, e, left: Math.round((dt - today) / 864e5) }; }).filter(e => e.left >= 0);
+
+  return head('04 · Xu hướng', 'Kế hoạch khuyến mãi', 'Giảm giá, lượt bán và tình trạng hết hàng thay đổi thế nào theo ngày, và các mốc khuyến mãi sắp tới.') +
+    kpiRow([['Lượt bán mỗi ngày', has ? '≈ ' + fmt(avgSold) : '—', 'trung bình ' + (ND - 1) + ' ngày'], ['Đang giảm giá', has ? pct(discP(last)) : '—', 'sản phẩm'],
+            ['Mức giảm trung bình', has ? pct(discAvg(last)) : '—', 'sản phẩm có giảm giá'],
+            ['Hết hàng', has ? pct(oosP(last)) : '—', has ? (oosP(last) >= oosP(0) ? 'tăng' : 'giảm') + ' từ ' + pct(oosP(0)) + ' đầu kỳ' : '', has && oosP(last) > oosP(0) + 1],
+            ['Mốc khuyến mãi gần nhất', EVENTS[0] ? (EVENTS[0].left === 0 ? 'Hôm nay' : 'Còn ' + EVENTS[0].left + ' ngày') : '—', EVENTS[0] ? EVENTS[0].e : '']]) +
+    dailyCard +
+    `<div class="grid2">
+      ${card('Mức giảm giá và tỷ lệ sản phẩm bán ra', '', ds.valid.length ?
+        `<div class="par col"><div class="stat"><span class="big">× ${fmt(best.sellP / (b0 || 1), 1)}</span><span class="s">tỷ lệ sản phẩm có bán trong ngày khi giảm ${best.l} so với không giảm giá</span></div>
+         <div>${vcols(ds.bands.map(b => ({ l: b.l, v: b.sellP, t: pct(b.sellP), cls: b.sellP >= maxSell * 0.85 ? 'hi' : '' })), maxSell, 110)}</div></div>` : empty)}
+      ${effCard}
+    </div>
+    <div class="grid2">
+      ${card('Lượt bán mỗi ngày theo danh mục', '', catRows.length ? note('Trung bình ' + (ND - 1) + ' ngày và tỷ lệ sản phẩm đang giảm giá; chỉ gồm danh mục có theo dõi giá hằng ngày')
+        + hbars(catRows.map(c => ({ label: c.name, v: c.dl, t: fmt(c.dl), s: pct(c.disc / c.n * 100, 0), click: c.c })), catRows[0].dl, { lw: 150, w: 46, fill: true }) : '<div class="empty">Không có dữ liệu</div>')}
+      ${card('Lịch khuyến mãi sắp tới', tag('Cần chuẩn bị'), table([
+        { h: 'Ngày', f: e => e.d.toLocaleDateString('vi-VN') }, { h: 'Sự kiện', f: e => e.e },
+        { h: 'Còn lại', f: e => `<span class="days">${e.left === 0 ? 'Hôm nay' : e.left + ' ngày'}</span>`, r: 1 },
+        { h: 'Việc cần làm', f: e => e.left <= 7 ? 'Bật mã giảm giá' : e.left <= 30 ? 'Kiểm tra tồn kho' : 'Lên kế hoạch nhập hàng' }], EVENTS))}
+    </div>` +
+    card('Sản phẩm mới lên sàn theo năm', '', vcols(years.map(y => ({ l: String(y.y), v: y.n, t: fmt(y.n / 1000, 1) + 'k', cls: y.n === maxY ? 'hi' : '' })), maxY, 120) + '<span class="note">2026: đến tháng 10</span>');
+}
+
+// Phương án dự phòng khi chưa có chuỗi theo ngày: dùng cửa sổ cố định 18–21/10 như trước
+function pageTrendLegacy(arr) {
+  const ds = discountStats(arr);
+  const maxSell = Math.max(...ds.bands.map(b => b.sellP), 1);
+  const b0 = ds.bands[0].sellP, best = ds.bands.slice().sort((a, b) => b.sellP - a.sellP)[0];
+  const catD = new Map();
+  for (const x of ds.d) { let o = catD.get(x.c); if (!o) { o = { name: RAW.cats[x.c], c: x.c, dl: 0, n: 0, disc: 0 }; catD.set(x.c, o); } o.n++; if (x.dl > 0) o.dl += x.dl; if (x.disc > 0) o.disc++; }
+  const catRows = [...catD.values()].sort((a, b) => b.dl - a.dl);
+  const years = []; for (let y = 2017; y <= 2026; y++) years.push({ y, n: arr.filter(x => x.y === y).length });
+  const maxY = Math.max(...years.map(y => y.n), 1);
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const EVENTS = [['2026-11-11', 'Ngày đôi 11.11'], ['2026-11-27', 'Black Friday'], ['2026-12-12', 'Ngày đôi 12.12'], ['2027-01-01', 'Năm mới'],
+                  ['2027-01-27', 'Trước Tết (10 ngày)'], ['2027-02-06', 'Tết Đinh Mùi'], ['2027-03-03', 'Ngày đôi 3.3']]
+    .map(([d, e]) => { const dt = new Date(d + 'T00:00:00'); return { d: dt, e, left: Math.round((dt - today) / 864e5) }; }).filter(e => e.left >= 0);
+
+  return head('04 · Xu hướng', 'Kế hoạch khuyến mãi', 'Giảm giá ảnh hưởng thế nào đến khả năng bán ra, danh mục nào đang bán nhanh, và các mốc khuyến mãi sắp tới.') +
+    kpiRow([['Lượt bán mỗi ngày', ds.valid.length ? '≈ ' + fmt(ds.perDay) : '—'], ['Đang giảm giá', ds.d.length ? pct(ds.discP) : '—', 'sản phẩm'],
+            ['Mức giảm trung bình', ds.d.length ? pct(ds.discAvg) : '—', 'sản phẩm có giảm giá'], ['Hết hàng', ds.d.length ? pct(ds.oosP) : '—', 'sản phẩm', ds.oosP > 2],
+            ['Mốc khuyến mãi gần nhất', EVENTS[0] ? (EVENTS[0].left === 0 ? 'Hôm nay' : 'Còn ' + EVENTS[0].left + ' ngày') : '—', EVENTS[0] ? EVENTS[0].e : '']]) +
+    card('Mức giảm giá và tỷ lệ sản phẩm bán ra', tag('Dữ liệu giá 18–21/10/2026'), ds.valid.length ?
+      `<div class="par"><div class="stat"><span class="big">× ${fmt(best.sellP / (b0 || 1), 1)}</span><span class="s">tỷ lệ bán ra khi giảm ${best.l} so với không giảm giá</span></div>
+       <div>${vcols(ds.bands.map(b => ({ l: b.l, v: b.sellP, t: pct(b.sellP), cls: b.sellP >= maxSell * 0.85 ? 'hi' : '' })), maxSell, 110)}</div></div>`
+      : '<div class="empty">Danh mục đang chọn chưa có dữ liệu giá hằng ngày</div>') +
+    `<div class="grid2">
+      ${card('Lượt bán mỗi ngày theo danh mục', '', catRows.length ? `<div style="margin:-4px 0 8px;font-size:11.5px;color:var(--muted)">Lượt bán mỗi ngày và tỷ lệ sản phẩm đang giảm giá của danh mục</div>` + hbars(catRows.map(c => ({ label: c.name, v: c.dl, t: fmt(c.dl / 3), s: pct(c.disc / c.n * 100, 0), click: c.c })), catRows[0].dl, { lw: 150 }) : '<div class="empty">Không có dữ liệu</div>')}
+      ${card('Lịch khuyến mãi sắp tới', tag('Cần chuẩn bị'), table([
+        { h: 'Ngày', f: e => e.d.toLocaleDateString('vi-VN') }, { h: 'Sự kiện', f: e => e.e },
+        { h: 'Còn lại', f: e => `<span class="days">${e.left === 0 ? 'Hôm nay' : e.left + ' ngày'}</span>`, r: 1 },
+        { h: 'Việc cần làm', f: e => e.left <= 7 ? 'Bật mã giảm giá' : e.left <= 30 ? 'Kiểm tra tồn kho' : 'Lên kế hoạch nhập hàng' }], EVENTS))}
+    </div>
+    <div class="grid2">
+      ${card('Sản phẩm mới lên sàn theo năm', '', vcols(years.map(y => ({ l: String(y.y), v: y.n, t: fmt(y.n / 1000, 1) + 'k', cls: y.n === maxY ? 'hi' : '' })), maxY, 120) + '<span class="note">2026: đến tháng 10</span>')}
+      ${card('Mùa vụ và mức tăng ngày 11/11', tag('Chưa có dữ liệu', 'wait'), '<div class="empty">Chưa đủ dữ liệu theo mùa vụ để phân tích.</div>')}
+    </div>`;
+}
+
+/* =====================================================================
+   5. VẼ & SỰ KIỆN
+   ===================================================================== */
+const RENDER = { ov: pageOverview, mk: pageMarket, bh: pageBehavior, rv: pageReview, tr: pageTrend };
+
+function initFilters() {
+  const order = RAW.cats.map((n, i) => [n, i]).sort((a, b) => a[0].localeCompare(b[0], 'vi'));
+  document.getElementById('fCat').innerHTML = '<option value="-1">Tất cả danh mục</option>' + order.map(([n, i]) => `<option value="${i}">${esc(n)}</option>`).join('');
+  document.getElementById('fGrp').innerHTML = '<option value="-1">Tất cả</option>' + GROUPS.map((g, i) => `<option value="${i}">${g}</option>`).join('');
+  document.getElementById('fPb').innerHTML = '<option value="-1">Tất cả</option>' + PBANDS.map((g, i) => `<option value="${i}">${g}</option>`).join('');
+  const agg = new Map(); for (const x of ALL) agg.set(x.b, (agg.get(x.b) || 0) + x.s);
+  document.getElementById('brandList').innerHTML = [...agg.entries()].sort((a, b) => b[1] - a[1]).slice(0, 600).map(([b]) => `<option value="${esc(RAW.brands[b])}">`).join('');
+}
+
+function render() {
+  document.getElementById('nav').innerHTML = PAGES.map(p => `<button type="button" class="tab ${p.id === state.page ? 'active' : ''}" data-page="${p.id}"><span class="no">${p.no}</span>${p.name}</button>`).join('');
+  document.querySelectorAll('#topn button').forEach(b => b.classList.toggle('active', +b.dataset.n === state.topn));
+  document.getElementById('fCat').value = state.cat; document.getElementById('fGrp').value = state.grp;
+  document.getElementById('fPb').value = state.pb; document.getElementById('fBrand').value = state.brand;
+
+  const arr = filtered();
+  const chips = [];
+  if (state.cat >= 0) chips.push(RAW.cats[state.cat]); if (state.grp >= 0) chips.push(GROUPS[state.grp]);
+  if (state.pb >= 0) chips.push(PBANDS[state.pb]); if (state.brand) chips.push(state.brand);
+  const chipBox = document.getElementById('chips');
+  chipBox.style.display = chips.length ? '' : 'none';
+  chipBox.innerHTML = chips.length ? 'Đang lọc: ' + chips.map(c => `<span class="chip">${esc(c)}</span>`).join('') + ` · ${fmt(arr.length)} sản phẩm` : '';
+  const contentBox = document.getElementById('content');
+  contentBox.innerHTML = arr.length ? RENDER[state.page](arr) : '<div class="empty">Không có sản phẩm nào khớp với bộ lọc. Bấm biểu tượng đặt lại ở góc phải để xóa bộ lọc.</div>';
+  // đặt cụm Tùy chọn hiển thị ngang hàng tiêu đề trang (chiều cao hàng lọc thay đổi khi có dòng "Đang lọc")
+  document.getElementById('tools').style.top = (contentBox.offsetTop + 22) + 'px';
+  // Top N chỉ có tác dụng ở trang Thị trường và Đánh giá (các thẻ Top danh mục / thương hiệu / sản phẩm); trang khác ẩn đi
+  const topUsed = state.page === 'mk' || state.page === 'rv';
+  // cả cụm (Top N + nút đặt lại) chỉ hiện ở các trang có Top N
+  document.getElementById('tools').style.display = topUsed ? '' : 'none';
+}
+
+document.getElementById('nav').addEventListener('click', e => { const b = e.target.closest('[data-page]'); if (b) { state.page = b.dataset.page; document.getElementById('main').scrollTop = 0; render(); } });
+document.getElementById('topn').addEventListener('click', e => { const b = e.target.closest('[data-n]'); if (b) { state.topn = +b.dataset.n; render(); } });
+document.getElementById('reset').addEventListener('click', () => { Object.assign(state, { cat: -1, grp: -1, pb: -1, brand: '', topn: 10, pareto: 80, sortKey: 's', sortDir: -1, catAll: false, expand: {}, donut: 's', sellerMetric: 'sP', lowTab: 'g', lowMetric: 'n', trendMetric: 's' }); render(); });
+document.getElementById('fCat').addEventListener('change', e => { state.cat = +e.target.value; render(); });
+document.getElementById('fGrp').addEventListener('change', e => { state.grp = +e.target.value; render(); });
+document.getElementById('fPb').addEventListener('change', e => { state.pb = +e.target.value; render(); });
+document.getElementById('fBrand').addEventListener('change', e => { const v = e.target.value.trim(); state.brand = RAW.brands.includes(v) ? v : ''; render(); });
+document.getElementById('content').addEventListener('click', e => {
+  const tg = e.target.closest('[data-toggle="cat"]'); if (tg) { state.catAll = !state.catAll; render(); return; }
+  const dn = e.target.closest('[data-donut]'); if (dn) { state.donut = dn.dataset.donut; render(); return; }
+  const lt = e.target.closest('[data-lowtab]'); if (lt) { state.lowTab = lt.dataset.lowtab; render(); return; }
+  const lm = e.target.closest('[data-lowmetric]'); if (lm) { state.lowMetric = lm.dataset.lowmetric; render(); return; }
+  const tm = e.target.closest('[data-trendmetric]'); if (tm) { state.trendMetric = tm.dataset.trendmetric; render(); return; }
+  const sm = e.target.closest('[data-smetric]'); if (sm) { state.sellerMetric = sm.dataset.smetric; render(); return; }
+  const ex = e.target.closest('[data-expand]'); if (ex) { const k = ex.dataset.expand; state.expand[k] = !state.expand[k]; render(); return; }
+  const go = e.target.closest('[data-go]'); if (go) { state.page = go.dataset.go; document.getElementById('main').scrollTop = 0; render(); return; }
+  const par = e.target.closest('[data-par]'); if (par) { state.pareto = +par.dataset.par; render(); return; }
+  const th = e.target.closest('[data-sort]'); if (th) { const k = th.dataset.sort; state.sortDir = state.sortKey === k ? -state.sortDir : -1; state.sortKey = k; render(); return; }
+  const cat = e.target.closest('[data-cat]'); if (cat) { state.cat = +cat.dataset.cat; render(); }
+});
+document.getElementById('content').addEventListener('change', e => { if (e.target.id === 'pareto') { state.pareto = +e.target.value; render(); } });
+
+initFilters();
+render();
+</script>
+</body>
+</html>
